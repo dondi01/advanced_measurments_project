@@ -23,3 +23,6 @@
 
 # Ignore CSV files
 *.csv
+
+#ignore .zip files
+*.zip

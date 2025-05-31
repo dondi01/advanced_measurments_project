@@ -1,0 +1,59 @@
+import cv2
+import numpy as np
+import glob
+import matplotlib.pyplot as plt
+
+# 1. Load all images
+image_files = sorted(glob.glob("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Bucon_in_meno/*.png"))
+frames = [cv2.imread(f, cv2.IMREAD_COLOR) for f in image_files]
+frames = [f for f in frames if f is not None and f.shape == frames[0].shape]
+selected_indices = [2,3,4,5]  # <-- Change this list as needed
+frames = [frames[i] for i in selected_indices]
+
+
+
+H, W, C = frames[0].shape
+
+# 2. Use the first image as reference
+ref_img = frames[0]
+ref_gray = cv2.cvtColor(ref_img, cv2.COLOR_BGR2GRAY)
+
+# 3. Detect ORB keypoints and descriptors in reference
+orb = cv2.ORB_create(nfeatures=1000)
+ref_kp, ref_des = orb.detectAndCompute(ref_gray, None)
+
+aligned_frames = [ref_img]
+
+for idx, img in enumerate(frames[1:], 1):
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    kp, des = orb.detectAndCompute(img_gray, None)
+    if ref_des is None or des is None:
+        print(f"Descriptor extraction failed for image {idx}")
+        continue
+    # 4. Match features
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = bf.match(ref_des, des)
+    matches = sorted(matches, key=lambda x: x.distance)
+    # 5. Use the best matches
+    good_matches = matches[:50]
+    if len(good_matches) < 4:
+        print(f"Not enough matches for image {idx}")
+        continue
+    src_pts = np.float32([ref_kp[m.queryIdx].pt for m in good_matches]).reshape(-1,1,2)
+    dst_pts = np.float32([kp[m.trainIdx].pt for m in good_matches]).reshape(-1,1,2)
+    # 6. Find homography
+    H_mat, mask = cv2.findHomography(dst_pts, src_pts, cv2.RANSAC, 5.0)
+    # 7. Warp image to align with reference
+    aligned = cv2.warpPerspective(img, H_mat, (W, H))
+    aligned_frames.append(aligned)
+
+# 8. Blend aligned images (median or max)
+stacked = np.stack(aligned_frames, axis=3)
+reconstructed = np.median(stacked, axis=3).astype(np.uint8)
+
+# 9. Show result
+plt.figure(figsize=(10,10))
+plt.imshow(cv2.cvtColor(reconstructed, cv2.COLOR_BGR2RGB))
+plt.axis('off')
+plt.title("Reconstructed Subject (Feature-based Alignment)")
+plt.show()
