@@ -7,15 +7,15 @@ import matplotlib.pyplot as plt
 image_files = sorted(glob.glob("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Bucon_in_meno/*.png"))
 frames = [cv2.imread(f, cv2.IMREAD_COLOR) for f in image_files]
 frames = [f for f in frames if f is not None and f.shape == frames[0].shape]
-selected_indices = [2,3,4,5]  # <-- Change this list as needed
-frames = [frames[i] for i in selected_indices]
+#selected_indices = [0,1,2,3,4,5,6,7,8]  # <-- Change this list as needed
+#frames =  [frames[i] for i in selected_indices]
 
 
 
 H, W, C = frames[0].shape
 
 # 2. Use the first image as reference
-ref_img = frames[0]
+ref_img = frames[5]
 ref_gray = cv2.cvtColor(ref_img, cv2.COLOR_BGR2GRAY)
 
 # 3. Detect ORB keypoints and descriptors in reference
@@ -51,9 +51,15 @@ for idx, img in enumerate(frames[1:], 1):
 stacked = np.stack(aligned_frames, axis=3)
 reconstructed = np.median(stacked, axis=3).astype(np.uint8)
 
+# 8b. Sharpen the reconstructed image
+sharpen_kernel = np.array([[0, -1, 0],
+                           [-1, 5,-1],
+                           [0, -1, 0]])
+reconstructed_sharp = cv2.filter2D(reconstructed, -1, sharpen_kernel)
+
 # 9. Show result
 plt.figure(figsize=(10,10))
-plt.imshow(cv2.cvtColor(reconstructed, cv2.COLOR_BGR2RGB))
+plt.imshow(cv2.cvtColor(reconstructed_sharp, cv2.COLOR_BGR2RGB))
 plt.axis('off')
 plt.title("Reconstructed Subject (Feature-based Alignment)")
 plt.show()
