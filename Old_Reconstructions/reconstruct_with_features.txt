@@ -4,18 +4,18 @@ import glob
 import matplotlib.pyplot as plt
 
 # 1. Load all images
-image_files = sorted(glob.glob("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Bucon_in_meno/*.png"))
+image_files = sorted(glob.glob("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_marrone/*.png"))
 frames = [cv2.imread(f, cv2.IMREAD_COLOR) for f in image_files]
 frames = [f for f in frames if f is not None and f.shape == frames[0].shape]
-#selected_indices = [0,1,2,3,4,5,6,7,8]  # <-- Change this list as needed
-#frames =  [frames[i] for i in selected_indices]
+selected_indices = [2,3,4,5]  # <-- Change this list as needed
+frames =  [frames[i] for i in selected_indices]
 
 
 
 H, W, C = frames[0].shape
 
 # 2. Use the first image as reference
-ref_img = frames[5]
+ref_img = frames[3]
 ref_gray = cv2.cvtColor(ref_img, cv2.COLOR_BGR2GRAY)
 
 # 3. Detect ORB keypoints and descriptors in reference
