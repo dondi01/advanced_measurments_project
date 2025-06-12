@@ -27,3 +27,4 @@
 #ignore .zip files
 *.zip
 *.mat
+*.lprof
