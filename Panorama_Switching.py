@@ -6,13 +6,18 @@ import scipy.io
 import re
 from scipy.ndimage import distance_transform_edt
 import time
+from numba import njit, prange
 
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_marrone/*.png"
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_parmareggio_no/*.png"
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_nappies/*.png"
+#"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
 
 #Define the file path to the images
-filepath="C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_nappies/*.png"
+filepath="C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
+
+
+
 
 # Function to convert strings to integers where possible, useful to order files
 def tryint(s):
@@ -20,6 +25,13 @@ def tryint(s):
         return int(s)
     except:
         return s
+
+#@njit(fastmath=True,parallel=True)
+def apply_feather(feather, warped, panorama, C) -> np.ndarray:
+    for c in range(C):
+        panorama[..., c] += warped[..., c] * feather
+    return panorama
+    
 
 # Function to split strings into alphanumeric parts for sorting, also considers case where it's not just the number
 #but string + number
@@ -29,15 +41,17 @@ def alphanum_key(s):
 #@profile
 def main(frames, orb, bf) -> np.ndarray:
 
-    # To crop the circle away if useful, doesn't look like it is
-    # crop_w, crop_h = 1000, 900
-    # H, W, C = frames[0].shape
-    # center_x, center_y = W // 2, H // 2
-    # x1 = center_x - crop_w // 2
-    # y1 = center_y - crop_h // 2
-    # x2 = x1 + crop_w
-    # y2 = y1 + crop_h
-    # #frames = [f[y1:y2, x1:x2] for f in frames]
+    frames=frames[::2]
+    # 3. Undistort all images
+    frames = [cv2.undistort(f, camera_matrix, dist_coeffs) for f in frames]
+    crop_w, crop_h = 1556, 1052
+    H, W, C = frames[0].shape
+    center_x, center_y = W // 2, H // 2
+    x1 = center_x - crop_w // 2
+    y1 = center_y - crop_h // 2
+    x2 = x1 + crop_w
+    y2 = y1 + crop_h
+    frames = [f[y1:y2, x1:x2] for f in frames]
 
     #Define image size
     H, W, C = frames[0].shape
@@ -154,8 +168,9 @@ def main(frames, orb, bf) -> np.ndarray:
 
         #For each color channel we add the warped image to the panorama, weighted 
         #by the feathering mask
-        for c in range(C):
-            panorama[..., c] += warped[..., c] * feather
+        panorama=apply_feather(feather, warped,panorama,C)
+        # for c in range(C):
+        #     panorama[..., c] += warped[..., c] * feather
         weight += feather
 
     # Avoid division by zero in normalization
@@ -185,19 +200,24 @@ image_files = sorted(
     key=alphanum_key)
 frames = [cv2.imread(f, cv2.IMREAD_COLOR) for f in image_files]
 frames = [f for f in frames if f is not None and f.shape == frames[0].shape]
-# 3. Undistort all images
-frames = [cv2.undistort(f, camera_matrix, dist_coeffs) for f in frames]
+
+
 #ORB feature matcher setup, to estimate subject movement by matching similar features
-orb = cv2.ORB_create(1000)
+orb = cv2.ORB_create(200)
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 orb.detectAndCompute(frames[0], None)  # Initialize ORB
 start=time.time()
 res=main(frames,orb,bf)
+
+#UNCOMMENT IF PICTURE IS DARK
+value = 100
+res = cv2.add(res, np.ones(res.shape, dtype='uint8') * value)
+cv2.imwrite("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/Green_Buco_in_meno.png", res)
 print("Execution time is:",time.time()-start)
 
 # # Show the result
 plt.figure(figsize=(15, 8))
 plt.imshow(cv2.cvtColor(res, cv2.COLOR_BGR2RGB))
 plt.axis('off')
-plt.title("Reconstructed Subject (Feather Blend)")
+#plt.title("Reconstructed Subject (Feather Blend)")
 plt.show()
