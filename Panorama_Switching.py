@@ -7,6 +7,9 @@ import re
 from scipy.ndimage import distance_transform_edt
 import time
 from numba import njit, prange
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent
 
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_marrone/*.png"
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_parmareggio_no/*.png"
@@ -14,7 +17,9 @@ from numba import njit, prange
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
 
 #Define the file path to the images
-filepath="C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
+filepath = str(project_root / 'dataset_piccoli' / 'Scorre_verde' / 'Buco_in_meno' / '*.png')
+
+#filepath="C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
 
 
 
@@ -191,7 +196,9 @@ def main(frames, orb, bf) -> np.ndarray:
 
 
 # 1. Load distortion matrix from .mat file
-mat = scipy.io.loadmat("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/TARATURA/medium_dataset_taratura.mat")
+mat = scipy.io.loadmat(project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
+
+# mat = scipy.io.loadmat("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/TARATURA/medium_dataset_taratura.mat")
 camera_matrix = mat['K']
 dist_coeffs = mat['dist']
 # 2. Load all images
@@ -212,7 +219,8 @@ res=main(frames,orb,bf)
 #UNCOMMENT IF PICTURE IS DARK
 value = 100
 res = cv2.add(res, np.ones(res.shape, dtype='uint8') * value)
-cv2.imwrite("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/Green_Buco_in_meno.png", res)
+cv2.imwrite(project_root / 'Reconstructed' / 'Green_Buco_in_meno.png', res)
+#cv2.imwrite("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/Green_Buco_in_meno.png", res)
 print("Execution time is:",time.time()-start)
 
 # # Show the result
