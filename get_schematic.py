@@ -85,73 +85,32 @@ def center_pad(img, target_shape):
 # Start processing
 start = time.time()
 
-# Path to your images
-base_path = "C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Schematics/green.png"
-test_path = "C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/green_buco_in_piu.png"
+# Path to your image
+base_path = "C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/green_OK.png"
 
-# Load the base mask (already aligned horizontally)
-base_mask = cv2.imread(base_path, cv2.IMREAD_GRAYSCALE)
-if base_mask is None:
-    raise ValueError("Base mask not found or invalid path.")
+# Preprocess the image
+base_img, base_contours, base_thresh = preprocess(base_path)
 
-# Preprocess the test image
-test_img, test_contours, test_thresh = preprocess(test_path)
-
-# Align the test mask to zero orientation
-aligned_test_thresh, test_rect, test_main_contour = align_image_to_zero(test_thresh, test_contours)
-
-# Resize and align the test mask to match the base mask
-if test_rect is not None:
-    # Get width and height (sorted so width <= height)
-    base_h, base_w = base_mask.shape[:2]
-    test_w, test_h = sorted(test_rect[1])
-
-    # Compute scaling ratios
-    ratio_w = base_w / test_w if test_w != 0 else 1
-    ratio_h = base_h / test_h if test_h != 0 else 1
-
-    # Resize test mask to match base mask's object size
-    scaling_ratio = min(ratio_w, ratio_h)
-    new_w = int(aligned_test_thresh.shape[1] * scaling_ratio)
-    new_h = int(aligned_test_thresh.shape[0] * scaling_ratio)
-    aligned_test_thresh = cv2.resize(aligned_test_thresh, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-
-    # Center crop or pad to match base mask size
-    target_shape = base_mask.shape[:2]
-    if aligned_test_thresh.shape[0] > target_shape[0] or aligned_test_thresh.shape[1] > target_shape[1]:
-        aligned_test_thresh = center_crop(aligned_test_thresh, target_shape)
-    elif aligned_test_thresh.shape[0] < target_shape[0] or aligned_test_thresh.shape[1] < target_shape[1]:
-        aligned_test_thresh = center_pad(aligned_test_thresh, target_shape)
-
-# Compute absolute difference between the base and test masks
-diff_mask = cv2.absdiff(base_mask, aligned_test_thresh)
-
-# Optional: clean up small noise
-kernel = np.ones((5, 5), np.uint8)
-diff_mask = cv2.morphologyEx(diff_mask, cv2.MORPH_OPEN, kernel)
-
-print(f"Execution time: {time.time() - start:.2f} seconds")
+# Align the mask to zero orientation
+aligned_base_thresh, base_rect, base_main_contour = align_image_to_zero(base_thresh, base_contours)
 
 # Plot the results
-plt.figure(figsize=(15, 10))
+plt.figure(figsize=(10, 6))
 
-# Base mask
-plt.subplot(1, 3, 1)
-plt.imshow(base_mask, cmap='gray')
-plt.title('Base Mask')
+# Original mask
+plt.subplot(1, 2, 1)
+plt.imshow(base_thresh, cmap='gray')
+plt.title('Original Mask')
 plt.axis('off')
 
-# Aligned test mask
-plt.subplot(1, 3, 2)
-plt.imshow(aligned_test_thresh, cmap='gray')
-plt.title('Aligned Test Mask')
-plt.axis('off')
-
-# Difference mask
-plt.subplot(1, 3, 3)
-plt.imshow(diff_mask, cmap='gray')
-plt.title('Difference Mask')
+# Aligned mask
+plt.subplot(1, 2, 2)
+plt.imshow(aligned_base_thresh, cmap='gray')
+plt.title('Aligned Mask')
 plt.axis('off')
 
 plt.tight_layout()
 plt.show()
+
+cv2.imwrite("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Schematics/green.png", aligned_base_thresh)
+print(f"Execution time: {time.time() - start:.2f} seconds")
