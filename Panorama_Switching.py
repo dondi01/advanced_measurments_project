@@ -12,11 +12,10 @@ from numba import njit, prange
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_parmareggio_no/*.png"
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_nappies/*.png"
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
+#"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Nappi/*.png"
 
 #Define the file path to the images
-filepath="C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
-
-
+filepath="C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_parmareggio_no/*.png"
 
 
 # Function to convert strings to integers where possible, useful to order files
@@ -26,7 +25,6 @@ def tryint(s):
     except:
         return s
 
-#@njit(fastmath=True,parallel=True)
 def apply_feather(feather, warped, panorama, C) -> np.ndarray:
     for c in range(C):
         panorama[..., c] += warped[..., c] * feather
@@ -41,7 +39,7 @@ def alphanum_key(s):
 #@profile
 def main(frames, orb, bf) -> np.ndarray:
 
-    frames=frames[::2]
+    #frames=frames[::2]
     # 3. Undistort all images
     frames = [cv2.undistort(f, camera_matrix, dist_coeffs) for f in frames]
     crop_w, crop_h = 1556, 1052
@@ -162,7 +160,7 @@ def main(frames, orb, bf) -> np.ndarray:
         # technique, that decreases the weight of the pixels at the edges, making the images blend together
         # more smoothly
         small_mask = cv2.resize(mask, (mask.shape[1] // 8, mask.shape[0] // 8), interpolation=cv2.INTER_LINEAR)
-        small_blur = cv2.blur(small_mask, (21, 21))
+        small_blur = cv2.blur(small_mask, (5, 5))
         feather = cv2.resize(small_blur, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_LINEAR)
         feather = np.clip(feather, 1e-3, 1.0)
 
@@ -200,7 +198,7 @@ image_files = sorted(
     key=alphanum_key)
 frames = [cv2.imread(f, cv2.IMREAD_COLOR) for f in image_files]
 frames = [f for f in frames if f is not None and f.shape == frames[0].shape]
-
+#frames=[cv2.add(f,np.ones(f.shape, dtype='uint8') * 100) for f in frames]  # UNCOMMENT IF PICTURE IS DARK
 
 #ORB feature matcher setup, to estimate subject movement by matching similar features
 orb = cv2.ORB_create(200)
@@ -211,8 +209,8 @@ res=main(frames,orb,bf)
 
 #UNCOMMENT IF PICTURE IS DARK
 value = 100
-res = cv2.add(res, np.ones(res.shape, dtype='uint8') * value)
-cv2.imwrite("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/Green_Buco_in_meno.png", res)
+ #res = cv2.add(res, np.ones(res.shape, dtype='uint8') * value)
+cv2.imwrite("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/parmareggio_no.png", res)
 print("Execution time is:",time.time()-start)
 
 # # Show the result
