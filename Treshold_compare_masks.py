@@ -2,6 +2,8 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+from pathlib import Path
+project_root = Path(__file__).resolve().parent
 
 def get_orientation_angle_and_rectangle(contour):
     rect = cv2.minAreaRect(contour)
@@ -64,8 +66,8 @@ def center_crop(img, target_shape):
 
 start=time.time()
 # Paths to your images
-base_path = "C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/green_OK.png"
-test_path = "C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/green_buco_in_piu.png"
+base_path = str(project_root / "Reconstructed" / "green_OK.png")
+test_path = str(project_root / "Reconstructed" / "green_buco_in_piu.png")
 
 # Preprocess both images
 base_img, base_contours, base_thresh = preprocess(base_path)
