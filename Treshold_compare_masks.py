@@ -101,15 +101,16 @@ def center_crop(img, target_shape):
 start = time.time()
 
 # Paths to your images
-base_path = str(project_root / "Reconstructed" / "green_ok.png")
-test_path = str(project_root / "dataset_piccoli" / "dezoommata_green_cut.png")
+base_path = str(project_root / "Schematics" / "parmareggio.png")
+test_path = str(project_root / "Reconstructed" / "parmareggio_no.png")
 
 # Preprocess both images
-base_img, base_contours, base_thresh = preprocess(base_path)
+_, base_contours, _ = preprocess(base_path)
 test_img, test_contours, test_thresh = preprocess(test_path)
+aligned_base_thresh= cv2.imread(base_path, cv2.IMREAD_GRAYSCALE)
 
 # Compute the angles of the main contours
-base_angle, _, _ = get_orientation_angle_and_rectangle(get_main_object_contour(base_contours, base_thresh.shape))
+base_angle, _, _ = get_orientation_angle_and_rectangle(get_main_object_contour(base_contours, aligned_base_thresh.shape))
 test_angle, _, _ = get_orientation_angle_and_rectangle(get_main_object_contour(test_contours, test_thresh.shape))
 
 # Find the best alignment axis to minimize total rotation
@@ -117,7 +118,7 @@ best_axis = find_best_alignment_angle(base_angle, test_angle)
 print(f"Best alignment axis: {best_axis+90}°")
 
 # Align both masks to the best axis
-aligned_base_thresh, base_rect, base_main_contour = align_image_to_angle(base_thresh, base_contours, best_axis)
+_, base_rect, base_main_contour = align_image_to_angle(aligned_base_thresh, base_contours, best_axis)
 aligned_test_thresh, test_rect, test_main_contour = align_image_to_angle(test_thresh, test_contours, best_axis)
 
 # Use main object rectangles for scaling

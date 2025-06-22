@@ -43,21 +43,34 @@ def preprocess(image_path):
     contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     return image, contours, thresh
 
-# Function to align the image to zero orientation based on the main object contour
-def align_image_to_zero(img, contours):
+def align_image_to_least_rotation(img, contours):
+    """Align the image to the axis that involves the least rotation."""
     main_contour = get_main_object_contour(contours, img.shape)
     if main_contour is None or len(main_contour) < 5:
         return img, None, None
+
+    # Get the orientation angle and bounding rectangle
     angle, rect_center, rect = get_orientation_angle_and_rectangle(main_contour)
-    M_rot = cv2.getRotationMatrix2D(rect_center, angle, 1.0)
+
+    # Define possible axes to align to
+    possible_axes = [0, 90, -90]
+
+    # Find the axis that requires the least rotation
+    best_axis = min(possible_axes, key=lambda axis: abs(angle - axis))
+    rotation_angle = angle - best_axis
+
+    # Compute the rotation matrix
+    M_rot = cv2.getRotationMatrix2D(rect_center, rotation_angle, 1.0)
     (h, w) = img.shape[:2]
     rotated_img = cv2.warpAffine(img, M_rot, (w, h), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_REPLICATE)
-    (h, w) = img.shape[:2]
+
+    # Translate the rectangle to the center of the image
     img_center = (w // 2, h // 2)
-    dx = img_center[0] - rect_center[0]
-    dy = img_center[1] - rect_center[1]
+    dx = img_center[0] - int(rect_center[0])
+    dy = img_center[1] - int(rect_center[1])
     M_trans = np.float32([[1, 0, dx], [0, 1, dy]])
     aligned_img = cv2.warpAffine(rotated_img, M_trans, (w, h), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_REPLICATE)
+
     return aligned_img, rect, main_contour
 
 # Function to center crop the image to match the target shape
