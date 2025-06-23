@@ -12,10 +12,6 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent
 file_name = 'verde_dis_norm_clahe.png'
 
-#"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_marrone/*.png"
-#"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_parmareggio_no/*.png"
-#"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_nappies/*.png"
-#"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
 
 #Define the file path to the images
 filepath = str(project_root / 'dataset_piccoli' / 'Scorre_verde' / 'Lettere_disallineate' / '*.png')
@@ -211,7 +207,6 @@ def main(frames, orb, bf) -> np.ndarray:
         #We compute the warping of the image
         warped = cv2.warpAffine(img, offset_M[:2], (panorama_width, panorama_height))
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        #gray_img = cv2.equalizeHist(gray_img)
         mask = cv2.warpAffine((gray_img > 20).astype(np.float32), offset_M[:2], (panorama_width, panorama_height))
         # mask = cv2.warpAffine((img[...,0] > 20).astype(np.float32), offset_M[:2], (panorama_width, panorama_height))
 
@@ -267,16 +262,10 @@ orb.detectAndCompute(frames[0], None)  # Initialize ORB
 start=time.time()
 res=main(frames,orb,bf)
 
-#UNCOMMENT IF PICTURE IS DARK
-#res_ycrcb = cv2.cvtColor(res, cv2.COLOR_BGR2YCrCb)
-#clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-#res_ycrcb[:, :, 0] = clahe.apply(res_ycrcb[:, :, 0])
-#res = cv2.cvtColor(res_ycrcb, cv2.COLOR_YCrCb2BGR)
-#res = cv2.cvtColor(res, cv2.COLOR_YCrCb2BGR)
-#value = 100
-#res = cv2.add(res, np.ones(res.shape, dtype='uint8') * value)
+# Normalization between 0 and 255 for taking advantage of the full range of pixel values
 res = cv2.normalize(res, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
 #res = res.astype(np.uint8)
+# Save the result
 cv2.imwrite(str(project_root / 'Reconstructed' / file_name) , res)
 print("Execution time is:",time.time()-start)
 
@@ -287,6 +276,7 @@ plt.axis('off')
 #plt.title("Reconstructed Subject (Feather Blend)")
 plt.show()
 
+# Plot histogram of pixel values in the resulting panorama for inspection
 plt.figure(figsize=(7, 4))
 plt.hist(res.ravel(), bins=255, color='blue', alpha=0.7)
 plt.title('Histogram of diff_mask After Opening')
