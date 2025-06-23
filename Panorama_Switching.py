@@ -10,6 +10,7 @@ from numba import njit, prange
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parent
+file_name = 'verde_dis_norm_clahe.png'
 
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_marrone/*.png"
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/Scorre_parmareggio_no/*.png"
@@ -17,7 +18,7 @@ project_root = Path(__file__).resolve().parent
 #"C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
 
 #Define the file path to the images
-filepath = str(project_root / 'dataset_piccoli' / 'Scorre_verde' / 'Buco_in_meno' / '*.png')
+filepath = str(project_root / 'dataset_piccoli' / 'Scorre_verde' / 'Lettere_disallineate' / '*.png')
 
 #filepath="C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_piccoli/Scorre_verde/Buco_in_meno/*.png"
 
@@ -73,6 +74,7 @@ def main(frames, orb, bf) -> np.ndarray:
         #Take current image
         img_curr = frames[i]
         gray_curr = cv2.cvtColor(img_curr, cv2.COLOR_BGR2GRAY)
+        #gray_curr = cv2.equalizeHist(gray_curr)  # Optional: equalize histogram for better contrast
         kp_curr, des_curr = orb.detectAndCompute(gray_curr, None)
 
         #If no features are found, skip this frame
@@ -136,16 +138,62 @@ def main(frames, orb, bf) -> np.ndarray:
 
     # Stack all corners and find the min and max coordinates to define the panorama size
     all_corners = np.vstack(all_corners)
+
+
+
     x_min, y_min = np.floor(all_corners.min(axis=0)).astype(int)
     x_max, y_max = np.ceil(all_corners.max(axis=0)).astype(int)
-
-    # Calculate panorama dimensions
     panorama_width = x_max - x_min
     panorama_height = y_max - y_min
+
+    # If the panorama is too large, we filter outliers to avoid excessive size
+    if panorama_width > 10000 or panorama_height > 10000:
+        zero_panorama = True
+        threshold_coefficient = 0.75
+        while zero_panorama:
+            print(f"Panorama size is too large {panorama_width}x{panorama_height}, filtering outliers.")
+
+            median = np.median(all_corners, axis=0)
+
+            # Compute distance from median for each corner
+            distances = np.linalg.norm(all_corners - median, axis=1)
+
+            # Set a threshold (e.g., 1.5 times the median absolute deviation)
+            threshold = threshold_coefficient * np.median(np.abs(distances - np.median(distances)))
+
+            # Keep only corners within the threshold
+            filtered_corners = all_corners[distances < threshold]
+
+            # Use filtered corners to compute panorama bounds
+            if filtered_corners.size == 0:
+                x_min, y_min = 0, 0
+                x_max, y_max = 0, 0
+            else:
+                x_min, y_min = np.floor(filtered_corners.min(axis=0)).astype(int)
+                x_max, y_max = np.ceil(filtered_corners.max(axis=0)).astype(int)
+
+            # Calculate panorama dimensions
+            panorama_width = x_max - x_min
+            panorama_height = y_max - y_min
+
+            # if the panorama is too small, we increase the threshold coefficient since we are filtering out too much
+            if panorama_width > 1500 and panorama_height > 1500:
+                zero_panorama = False
+            elif threshold_coefficient > 20.0:
+                print("Threshold coefficient is too high, stopping filtering.")
+                zero_panorama = False
+            else:
+                threshold_coefficient = threshold_coefficient + 0.25
+
+   
+    print(f"Panorama size: {panorama_width}x{panorama_height}, Offset: ({x_min}, {y_min})")
 
     # Initialize panorama and weight maps, the weights are used to blend the images together
     panorama = np.zeros((panorama_height, panorama_width, C), dtype=np.float32)
     weight = np.zeros((panorama_height, panorama_width), dtype=np.float32)
+
+    #init clahe for brightness and contrast correction
+    clahe = cv2.createCLAHE(clipLimit=1.75, tileGridSize=(20, 20))
 
     # Warp (rototranslate+shearing) images and blend them into the panorama
     for i, img in enumerate(frames):
@@ -156,9 +204,14 @@ def main(frames, orb, bf) -> np.ndarray:
         offset_M[0,2] -= x_min
         offset_M[1,2] -= y_min
 
+        img_ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+        img_ycrcb[:, :, 0] = clahe.apply(img_ycrcb[:, :, 0])
+        img = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCrCb2BGR)
+
         #We compute the warping of the image
         warped = cv2.warpAffine(img, offset_M[:2], (panorama_width, panorama_height))
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        #gray_img = cv2.equalizeHist(gray_img)
         mask = cv2.warpAffine((gray_img > 20).astype(np.float32), offset_M[:2], (panorama_width, panorama_height))
         # mask = cv2.warpAffine((img[...,0] > 20).astype(np.float32), offset_M[:2], (panorama_width, panorama_height))
 
@@ -167,11 +220,11 @@ def main(frames, orb, bf) -> np.ndarray:
         # technique, that decreases the weight of the pixels at the edges, making the images blend together
         # more smoothly
         small_mask = cv2.resize(mask, (mask.shape[1] // 8, mask.shape[0] // 8), interpolation=cv2.INTER_LINEAR)
-        small_blur = cv2.blur(small_mask, (21, 21))
+        small_blur = cv2.GaussianBlur(small_mask, (21, 21), 0)
         feather = cv2.resize(small_blur, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_LINEAR)
         feather = np.clip(feather, 1e-3, 1.0)
 
-        #For each color channel we add the warped image to the panorama, weighted 
+        #For each color channel we add the warped himage to the panorama, weighted 
         #by the feathering mask
         panorama=apply_feather(feather, warped,panorama,C)
         # for c in range(C):
@@ -197,8 +250,6 @@ def main(frames, orb, bf) -> np.ndarray:
 
 # 1. Load distortion matrix from .mat file
 mat = scipy.io.loadmat(project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
-
-# mat = scipy.io.loadmat("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/dataset_medi/TARATURA/medium_dataset_taratura.mat")
 camera_matrix = mat['K']
 dist_coeffs = mat['dist']
 # 2. Load all images
@@ -217,10 +268,16 @@ start=time.time()
 res=main(frames,orb,bf)
 
 #UNCOMMENT IF PICTURE IS DARK
-value = 100
-res = cv2.add(res, np.ones(res.shape, dtype='uint8') * value)
-cv2.imwrite(project_root / 'Reconstructed' / 'Green_Buco_in_meno.png', res)
-#cv2.imwrite("C:/Users/franc/Desktop/Scuola/Measurement/advanced_measurments_project/Reconstructed/Green_Buco_in_meno.png", res)
+#res_ycrcb = cv2.cvtColor(res, cv2.COLOR_BGR2YCrCb)
+#clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+#res_ycrcb[:, :, 0] = clahe.apply(res_ycrcb[:, :, 0])
+#res = cv2.cvtColor(res_ycrcb, cv2.COLOR_YCrCb2BGR)
+#res = cv2.cvtColor(res, cv2.COLOR_YCrCb2BGR)
+#value = 100
+#res = cv2.add(res, np.ones(res.shape, dtype='uint8') * value)
+res = cv2.normalize(res, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+#res = res.astype(np.uint8)
+cv2.imwrite(str(project_root / 'Reconstructed' / file_name) , res)
 print("Execution time is:",time.time()-start)
 
 # # Show the result
@@ -228,4 +285,11 @@ plt.figure(figsize=(15, 8))
 plt.imshow(cv2.cvtColor(res, cv2.COLOR_BGR2RGB))
 plt.axis('off')
 #plt.title("Reconstructed Subject (Feather Blend)")
+plt.show()
+
+plt.figure(figsize=(7, 4))
+plt.hist(res.ravel(), bins=255, color='blue', alpha=0.7)
+plt.title('Histogram of diff_mask After Opening')
+plt.xlabel('Pixel Value')
+plt.ylabel('Frequency')
 plt.show()
