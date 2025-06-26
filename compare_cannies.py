@@ -45,7 +45,7 @@ def preprocess_for_canny(image_path):
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     # Canny mask as in Prove.py
-    canny = cv2.Canny(blurred, 0, 50)
+    canny = cv2.Canny(blurred, 10, 50)
     
     return canny, contours, gray
 
@@ -74,12 +74,13 @@ def center_crop(img, target_shape):
     x2 = x1 + tw
     return img[y1:y2, x1:x2]
 
+
 # Start timing
 start = time.time()
 
 # Paths to your images
-base_path = str(project_root / "Reconstructed" / "parmareggio_ok.png")
-test_path = str(project_root / "Reconstructed" / "parmareggio_no.png")
+base_path = str(project_root / "Schematics" / "green.png")
+test_path = str(project_root / "Reconstructed" / "green_ok.png")
 
 # Preprocess both images for Canny and contours
 
@@ -157,14 +158,44 @@ plt.show()
 
 # Plot only the not matched pixels (missed and extra) as a diff mask
 diff_fuzzy = np.zeros_like(aligned_base_canny)
-diff_fuzzy[missed | extra] = 255
+diff_fuzzy[missed | extra] = 1  # Use 1 for binary mask
 
-# # Clean the diff mask using morphological opening to remove small noise
-# clean_kernel = np.ones((2, 2), np.uint8)
-# diff_fuzzy_clean = cv2.morphologyEx(diff_fuzzy, cv2.MORPH_OPEN, clean_kernel)
+diff_fuzzy = cv2.GaussianBlur(diff_fuzzy.astype(np.float32), (3, 3), 0)
+
+diff_fuzzy_sub = cv2.dilate(diff_fuzzy.astype(np.uint8), kernel, iterations=1)
+#diff_fuzzy_sub = cv2.medianBlur(diff_fuzzy_sub, 5)
 
 plt.figure(figsize=(7, 7))
-plt.imshow(diff_fuzzy, cmap='gray')
-plt.title("Fuzzy Difference Mask (Not Matched Pixels)")
+plt.imshow(diff_fuzzy, cmap='grey')
+plt.title("Not Matched Pixel Density (Neighborhood Count)")
+plt.axis('off')
+plt.show()
+
+plt.figure(figsize=(10, 10))
+
+# Convert base and test images to color if they are grayscale
+if len(base_gray.shape) == 2:
+    base_color = cv2.cvtColor(base_gray, cv2.COLOR_GRAY2RGB)
+else:
+    base_color = base_gray.copy()
+if len(test_gray.shape) == 2:
+    test_color = cv2.cvtColor(test_gray, cv2.COLOR_GRAY2RGB)
+else:
+    test_color = test_gray.copy()
+
+# Overlay differences on the test image (red for missed, green for extra)
+diff_overlay = test_color.copy()
+diff_overlay = cv2.normalize(diff_overlay, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+
+# Highlight missed (red) and extra (green) pixels
+missed_mask = (missed > 0)
+extra_mask = (extra > 0)
+diff_overlay[missed_mask] = [255, 0, 0]   # Red for missed
+# If missed and extra overlap, show as yellow
+diff_overlay[missed_mask & extra_mask] = [255, 255, 0]
+diff_overlay[extra_mask & ~missed_mask] = [0, 255, 0]   # Green for extra only
+
+plt.imshow(diff_overlay)
+plt.title("Differences Highlighted on Test Image\nRed: Missed, Green: Extra, Yellow: Both")
 plt.axis('off')
 plt.show()
