@@ -47,12 +47,14 @@ def get_main_object_contour(contours, image_shape, area_thresh=0.9):
         return None
     return max(filtered, key=cv2.contourArea)
 
-def preprocess(image_path):
+def preprocess(image):
     """Preprocess the image to extract contours and thresholded mask."""
-    image = cv2.imread(image_path)
     lightened = cv2.convertScaleAbs(image, alpha=1, beta=100)
-    gray = cv2.cvtColor(lightened, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (21, 21), 0)
+    try:
+        gray = cv2.cvtColor(lightened, cv2.COLOR_BGR2GRAY)
+    except cv2.error:
+        gray=lightened
+    blurred = cv2.GaussianBlur(gray, (31, 31), 0)
     thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
     contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     return image, contours, thresh
@@ -97,114 +99,117 @@ def center_crop(img, target_shape):
     x2 = x1 + tw
     return img[y1:y2, x1:x2]
 
-# Start timing
-start = time.time()
+def compare_and_plot_masks(base_img, test_img, show_plots=False):
+    """Compare and plot masks from base and test images (images as arrays). The test mask is always adapted to the base mask, never the other way around."""
+    start = time.time()
 
-# Paths to your images
-base_path = str(project_root / "Schematics" / "parmareggio.png")
-test_path = str(project_root / "Reconstructed" / "parmareggio_no.png")
+    aligned_base_thresh=base_img
+    # Preprocess both images (now pass arrays, not paths)
+    _, base_contours, _ = preprocess(base_img)
+    test_img_proc, test_contours, test_thresh = preprocess(test_img)
 
-# Preprocess both images
-_, base_contours, _ = preprocess(base_path)
-test_img, test_contours, test_thresh = preprocess(test_path)
-aligned_base_thresh= cv2.imread(base_path, cv2.IMREAD_GRAYSCALE)
+    # Compute the angles of the main contours
+    base_angle, _, _ = get_orientation_angle_and_rectangle(get_main_object_contour(base_contours, aligned_base_thresh.shape))
+    test_angle, _, _ = get_orientation_angle_and_rectangle(get_main_object_contour(test_contours, test_thresh.shape))
 
-# Compute the angles of the main contours
-base_angle, _, _ = get_orientation_angle_and_rectangle(get_main_object_contour(base_contours, aligned_base_thresh.shape))
-test_angle, _, _ = get_orientation_angle_and_rectangle(get_main_object_contour(test_contours, test_thresh.shape))
+    # Find the best alignment axis to minimize total rotation
+    best_axis = find_best_alignment_angle(base_angle, test_angle)
 
-# Find the best alignment axis to minimize total rotation
-best_axis = find_best_alignment_angle(base_angle, test_angle)
-print(f"Best alignment axis: {best_axis+90}°")
+    # Align only the test mask to the base mask's orientation and center
+    aligned_test_thresh, test_rect, test_main_contour = align_image_to_angle(test_thresh, test_contours, best_axis)
 
-# Align both masks to the best axis
-_, base_rect, base_main_contour = align_image_to_angle(aligned_base_thresh, base_contours, best_axis)
-aligned_test_thresh, test_rect, test_main_contour = align_image_to_angle(test_thresh, test_contours, best_axis)
+    # Use main object rectangles for scaling (adapt test to base)
+    base_rect = cv2.minAreaRect(get_main_object_contour(base_contours, aligned_base_thresh.shape))
+    if test_rect is not None and base_rect is not None:
+        base_w, base_h = sorted(base_rect[1])
+        test_w, test_h = sorted(test_rect[1])
+        ratio_w = base_w / test_w if test_w != 0 else 1
+        ratio_h = base_h / test_h if test_h != 0 else 1
+        new_w = int(aligned_test_thresh.shape[1] * ratio_w)
+        new_h = int(aligned_test_thresh.shape[0] * ratio_h)
+        aligned_test_thresh = cv2.resize(aligned_test_thresh, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+        target_shape = aligned_base_thresh.shape[:2]
+        if aligned_test_thresh.shape[0] > target_shape[0] or aligned_test_thresh.shape[1] > target_shape[1]:
+            aligned_test_thresh = center_crop(aligned_test_thresh, target_shape)
+        elif aligned_test_thresh.shape[0] < target_shape[0] or aligned_test_thresh.shape[1] < target_shape[1]:
+            pad_vert = (target_shape[0] - aligned_test_thresh.shape[0]) // 2
+            pad_horz = (target_shape[1] - aligned_test_thresh.shape[1]) // 2
+            aligned_test_thresh = cv2.copyMakeBorder(
+                aligned_test_thresh,
+                pad_vert, target_shape[0] - aligned_test_thresh.shape[0] - pad_vert,
+                pad_horz, target_shape[1] - aligned_test_thresh.shape[1] - pad_horz,
+                cv2.BORDER_CONSTANT, value=0
+            )
 
-# Use main object rectangles for scaling
-if base_rect is not None and test_rect is not None:
-    # Get width and height (sorted so width <= height)
-    base_w, base_h = sorted(base_rect[1])
-    test_w, test_h = sorted(test_rect[1])
-
-    # Compute scaling ratios
-    ratio_w = base_w / test_w if test_w != 0 else 1
-    ratio_h = base_h / test_h if test_h != 0 else 1
-
-    # Resize test mask to match base mask's object size
-    new_w = int(aligned_test_thresh.shape[1] * ratio_w)
-    new_h = int(aligned_test_thresh.shape[0] * ratio_h)
-    aligned_test_thresh = cv2.resize(aligned_test_thresh, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-
-    # Center crop or pad to match base mask size
-    target_shape = aligned_base_thresh.shape[:2]
-    if aligned_test_thresh.shape[0] > target_shape[0] or aligned_test_thresh.shape[1] > target_shape[1]:
+    # Ensure the masks have the same size
+    if aligned_base_thresh.shape != aligned_test_thresh.shape:
+        target_shape = aligned_base_thresh.shape[:2]
         aligned_test_thresh = center_crop(aligned_test_thresh, target_shape)
-    elif aligned_test_thresh.shape[0] < target_shape[0] or aligned_test_thresh.shape[1] < target_shape[1]:
-        pad_vert = (target_shape[0] - aligned_test_thresh.shape[0]) // 2
-        pad_horz = (target_shape[1] - aligned_test_thresh.shape[1]) // 2
-        aligned_test_thresh = cv2.copyMakeBorder(
-            aligned_test_thresh,
-            pad_vert, target_shape[0] - aligned_test_thresh.shape[0] - pad_vert,
-            pad_horz, target_shape[1] - aligned_test_thresh.shape[1] - pad_horz,
-            cv2.BORDER_CONSTANT, value=0
-        )
+        # If test mask is still smaller, pad it
+        pad_vert = max(target_shape[0] - aligned_test_thresh.shape[0], 0)
+        pad_horz = max(target_shape[1] - aligned_test_thresh.shape[1], 0)
+        if pad_vert > 0 or pad_horz > 0:
+            aligned_test_thresh = cv2.copyMakeBorder(
+                aligned_test_thresh,
+                pad_vert // 2, pad_vert - pad_vert // 2,
+                pad_horz // 2, pad_horz - pad_horz // 2,
+                cv2.BORDER_CONSTANT, value=0
+            )
+        # If test mask is too big, crop again
+        if aligned_test_thresh.shape != target_shape:
+            aligned_test_thresh = center_crop(aligned_test_thresh, target_shape)
 
-# Ensure the masks have the same size
-if aligned_base_thresh.shape != aligned_test_thresh.shape:
-    min_h = min(aligned_base_thresh.shape[0], aligned_test_thresh.shape[0])
-    min_w = min(aligned_base_thresh.shape[1], aligned_test_thresh.shape[1])
-    aligned_base_thresh = center_crop(aligned_base_thresh, (min_h, min_w))
-    aligned_test_thresh = center_crop(aligned_test_thresh, (min_h, min_w))
+    # Compute absolute difference between the two masks
+    diff_mask = cv2.absdiff(aligned_base_thresh, aligned_test_thresh)
 
-# Compute absolute difference between the two masks
-diff_mask = cv2.absdiff(aligned_base_thresh, aligned_test_thresh)
+    # Optional: clean up small noise
+    kernel = np.ones((21, 21), np.uint8)
+    diff_mask = cv2.morphologyEx(diff_mask, cv2.MORPH_OPEN, kernel)
 
-# Optional: clean up small noise
-kernel = np.ones((21, 21), np.uint8)
-diff_mask = cv2.morphologyEx(diff_mask, cv2.MORPH_OPEN, kernel)
+    print(f"Execution time of compare masks: {time.time() - start:.2f} seconds")
+    if show_plots:
+        # Plot the aligned base mask, aligned test mask, and difference mask
+        plt.figure(figsize=(15, 5))
+        plt.subplot(1, 3, 1)
+        plt.imshow(aligned_base_thresh, cmap='gray')
+        plt.title("Aligned Base Mask")
+        plt.axis('off')
 
-#contours, _ = cv2.findContours(diff_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-# min_area = 200  # Adjust as needed
-# clean_mask = np.zeros_like(diff_mask)
-# for cnt in contours:
-#     if cv2.contourArea(cnt) > min_area:
-#         cv2.drawContours(clean_mask, [cnt], -1, 255, -1)
-# #diff_mask = clean_mask
-print(f"Execution time: {time.time() - start:.2f} seconds")
-print("diff mask has %d non zero pixels out of %d" % (np.count_nonzero(diff_mask), diff_mask.size))
+        plt.subplot(1, 3, 2)
+        plt.imshow(aligned_test_thresh, cmap='gray')
+        plt.title("Aligned Test Mask (Adapted)")
+        plt.axis('off')
 
-# Plot the aligned base mask, aligned test mask, and difference mask
-plt.figure(figsize=(15, 5))
-plt.subplot(1, 3, 1)
-plt.imshow(aligned_base_thresh, cmap='gray')
-plt.title("Aligned Base Mask")
-plt.axis('off')
+        plt.subplot(1, 3, 3)
+        plt.imshow(diff_mask, cmap='gray')
+        plt.title("Difference Mask")
+        plt.axis('off')
 
-plt.subplot(1, 3, 2)
-plt.imshow(aligned_test_thresh, cmap='gray')
-plt.title("Aligned Test Mask")
-plt.axis('off')
+        plt.tight_layout()
+        plt.show()
 
-plt.subplot(1, 3, 3)
-plt.imshow(diff_mask, cmap='gray')
-plt.title("Difference Mask")
-plt.axis('off')
+    # Overlay the two masks to visualize differences
+    overlay = np.zeros((aligned_base_thresh.shape[0], aligned_base_thresh.shape[1], 3), dtype=np.uint8)
 
-plt.tight_layout()
-plt.show()
+    # Red for base mask, green for test mask, yellow for overlap
+    overlay[(aligned_base_thresh == 0) & (aligned_test_thresh > 0)] = [255, 0, 0]  # Red: Base mask only
+    overlay[(aligned_test_thresh == 0) & (aligned_base_thresh > 0)] = [0, 255, 0]  # Green: Test mask only
+    overlay[(aligned_base_thresh == aligned_test_thresh)] = [255, 255, 0]  # Yellow: Overlap
 
-# Overlay the two masks to visualize differences
-overlay = np.zeros((aligned_base_thresh.shape[0], aligned_base_thresh.shape[1], 3), dtype=np.uint8)
+    if show_plots:
+        # Plot the overlay
+        plt.figure(figsize=(7, 7))
+        plt.imshow(overlay)
+        plt.title("Overlay of Base and Test Masks")
+        plt.axis('off')
+        plt.show()
 
-# Red for base mask, green for test mask, yellow for overlap
-overlay[(aligned_base_thresh == 0) & (aligned_test_thresh > 0)] = [255, 0, 0]  # Red: Base mask only
-overlay[(aligned_test_thresh == 0) & (aligned_base_thresh > 0)] = [0, 255, 0]  # Green: Test mask only
-overlay[(aligned_base_thresh == aligned_test_thresh)] = [255, 255, 0]  # Yellow: Overlap
+    return aligned_test_thresh, aligned_base_thresh, diff_mask, overlay
 
-# Plot the overlay
-plt.figure(figsize=(7, 7))
-plt.imshow(overlay)
-plt.title("Overlay of Base and Test Masks")
-plt.axis('off')
-plt.show()
+if __name__ == "__main__":
+    # Paths to your images
+    base_path = str(project_root / "Schematics" / "green.png")
+    test_path = str(project_root / "Reconstructed" / "green_buco_in_piu.png")
+    base = cv2.imread(base_path)
+    test = cv2.imread(test_path)
+    compare_and_plot_masks(base, test)
