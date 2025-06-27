@@ -1,49 +1,45 @@
 import cv2
 import numpy as np
 import extract_print_features as epf
+import Treshold_compare_masks as tcm
 
+
+#Extract the print from the test image using the test mask,
+#and then compares it with the oen precomputed from the base mask.
 def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
-    """
-    Compare a precomputed base print mask with a test carton print extracted from a test image and its mask.
-    Arguments:
-        base_mask: np.ndarray, binary mask of the base carton print (precomputed)
-        test_img: np.ndarray, image of the test carton
-        test_mask: np.ndarray, binary mask of the test carton
-        show_plots: bool, whether to show diagnostic plots
-    Returns:
-        diff_fuzzy: np.ndarray, fuzzy difference mask between base and test prints
-    """
+
     # Extract the print from the test image using the test mask
     test_print = epf.extract_print(test_mask, test_img, show_plots=False)
-    # Ensure test_print is the same size as base_mask (never modify base_mask)
+    
+    # Ensure test_print is the same size as base_mask 
     if base_mask.shape != test_print.shape:
+        # Adding [:2] to get only the height and width,
+        # should not be necessary as only color images have
+        # 3 channels but just in case
         target_shape = base_mask.shape[:2]
-        # Crop or pad test_print to match base_mask
-        def center_crop(img, target_shape):
-            h, w = img.shape[:2]
-            th, tw = target_shape
-            y1 = max((h - th) // 2, 0)
-            x1 = max((w - tw) // 2, 0)
-            y2 = y1 + th
-            x2 = x1 + tw
-            return img[y1:y2, x1:x2]
-        test_print = center_crop(test_print, target_shape)
-        pad_vert = max(target_shape[0] - test_print.shape[0], 0)
-        pad_horz = max(target_shape[1] - test_print.shape[1], 0)
-        if pad_vert > 0 or pad_horz > 0:
-            test_print = cv2.copyMakeBorder(
-                test_print,
-                pad_vert // 2, pad_vert - pad_vert // 2,
-                pad_horz // 2, pad_horz - pad_horz // 2,
-                cv2.BORDER_CONSTANT, value=0
-            )
-        # If test_print is still too big, crop again
+        # Crop if too big, pad if too small, using the same logic as in Treshold_compare_masks
+        if test_print.shape[0] > target_shape[0] or test_print.shape[1] > target_shape[1]:
+            # If test ended up bigger (had to zoom in), crop it
+            test_print = tcm.center_crop(test_print, target_shape)
+        elif test_print.shape[0] < target_shape[0] or test_print.shape[1] < target_shape[1]:
+            # If it ended up smaller (had to zoom out), pad it with black stripes
+            test_print = tcm.center_pad(test_print, target_shape, pad_value=0)
+        
+        # If test_print is still not the right size (due to rounding), crop again.
+        # This is a safeguard, usually not needed but can happen with some images,
+        # but it is good to have it just in case.
         if test_print.shape != target_shape:
-            test_print = center_crop(test_print, target_shape)
+            test_print = tcm.center_crop(test_print, target_shape)
+            
     # Dilate both masks to allow for tolerance in matching
     kernel = np.ones((15, 15), np.uint8)
     dil_base = cv2.dilate(base_mask, kernel, iterations=1)
     dil_test = cv2.dilate(test_print, kernel, iterations=1)
+
+    #By comparing the original ones to the dilated ones,
+    #we can find the differences between the two prints, with some tolerance.
+    #It's called fuzzy edge matching.
+
     # Missed: base print not matched by test print
     missed = (base_mask > 0) & (dil_test == 0)
     # Extra: test print not matched by base print
@@ -61,9 +57,13 @@ def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
         plt.title("Fuzzy Edge Match Overlay (Base vs Test Print)")
         plt.axis('off')
         plt.show()
+    
     # Fuzzy diff mask: missed or extra
     diff_fuzzy = np.zeros_like(base_mask)
+    #The difference mask is formed by pixels that are either missed or extra
+    #Uses | because it's two arrays of the same shape, or does not work here
     diff_fuzzy[missed | extra] = 1
+    #Then blurred to reduce noise
     diff_fuzzy = cv2.GaussianBlur(diff_fuzzy.astype(np.float32), (5, 5), 0)
     if show_plots:
         import matplotlib.pyplot as plt

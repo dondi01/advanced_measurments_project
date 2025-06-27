@@ -24,7 +24,6 @@ def tryint(s):
 def alphanum_key(s):
     return [tryint(c) for c in re.split('([0-9]+)', s)]
 
-#@njit(fastmath=True,parallel=True)
 def apply_feather(feather, warped, panorama, C) -> np.ndarray:
     for c in range(C):
         panorama[..., c] += warped[..., c] * feather
