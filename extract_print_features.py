@@ -7,7 +7,7 @@ import Treshold_compare_masks as tcm
 project_root = Path(__file__).resolve().parent
 
 def preprocess_for_canny(image):
-    blurred = cv2.GaussianBlur(image, (7, 7), 0)
+    blurred = cv2.GaussianBlur(image, (11, 11), 0)
     try:
         gray = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
     except cv2.error:
@@ -17,7 +17,7 @@ def preprocess_for_canny(image):
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     # Canny mask as in Prove.py
-    canny = cv2.Canny(blurred,0,30, apertureSize=3)
+    canny = cv2.Canny(blurred,0,50, apertureSize=3)
     
     return canny, contours, gray
 
@@ -83,7 +83,7 @@ def extract_print(schematic_img, picture_img, show_plots=True):
 
 
 if __name__ == "__main__":
-    base_img=cv2.imread(str(project_root / 'Schematics' / 'shapes'/'green.png'))  # Load the base image for comparison
-    test_img=cv2.imread(str(project_root / 'Reconstructed' / 'green_OK.png'))  # Load the test image
+    base_img=cv2.imread(str(project_root / 'Schematics' / 'shapes'/'parmareggio.png'))  # Load the base image for comparison
+    test_img=cv2.imread(str(project_root / 'Reconstructed' / 'parmareggio_ok.png'))  # Load the test image
     res=extract_print(base_img, test_img, show_plots=True)
-    cv2.imwrite(str(project_root / 'Schematics' / 'prints'/'green.png'), res * 255)  # Save the result as a binary mask
+    cv2.imwrite(str(project_root / 'Schematics' / 'prints'/'parmareggio.png'), res * 255)  # Save the result as a binary mask

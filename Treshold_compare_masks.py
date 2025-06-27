@@ -198,7 +198,7 @@ def compare_and_plot_masks(base_img, test_img, show_plots=False):
                 aligned_test_thresh,
                 pad_vert // 2, pad_vert - pad_vert // 2,
                 pad_horz // 2, pad_horz - pad_horz // 2,
-                cv2.BORDER_CONSTANT, value=0
+                cv2.BORDER_CONSTANT, value=255
             )
         # If test mask is too big, crop again
         if aligned_test_thresh.shape != target_shape:
