@@ -8,6 +8,8 @@ from scipy.ndimage import distance_transform_edt
 import time
 from numba import njit, prange
 from pathlib import Path
+import Treshold_compare_masks as tcm
+import paths
 
 project_root = Path(__file__).resolve().parent
 file_name = 'green_lettere_disallineate.png'
@@ -30,7 +32,7 @@ def apply_feather(feather, warped, panorama, C) -> np.ndarray:
     return panorama
 
 # Main panorama pipeline, takes frames, orb, bf, camera_matrix, dist_coeffs as input
-def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, file_name=None, save_path=None, show_plots=True):
+def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plots=True, save_path=None):
     frames = frames[::2]
     frames = [cv2.undistort(f, camera_matrix, dist_coeffs) for f in frames]
     crop_w, crop_h = 1556, 1052
@@ -137,24 +139,36 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, file_name
     x, y, w, h = cv2.boundingRect(coords)
     panorama_cropped = panorama[y:y+h, x:x+w]
     res = cv2.normalize(panorama_cropped, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-    if save_path is not None and file_name is not None:
-        cv2.imwrite(str(save_path / file_name), res)
+    # --- Mask outside main carton contour ---
+    gray = cv2.cvtColor(res, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    contours, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        # Find the largest contour (main carton)
+        main_contour = tcm.get_main_object_contour(contours, gray.shape,area_thresh=0.7)
+        mask = np.zeros_like(gray)
+        cv2.drawContours(mask, [main_contour], -1, 255, thickness=cv2.FILLED)
+        # Set anything outside the main contour to 0
+        res[mask == 0] = 0
+    # --- End mask logic ---
+    if save_path is not None:
+        cv2.imwrite(save_path, res)
     if show_plots:
         plt.figure(figsize=(15, 8))
-        plt.imshow(cv2.cvtColor(res, cv2.COLOR_BGR2RGB))
+        plt.imshow(cv2.cvtColor(mask, cv2.COLOR_BGR2RGB))
         plt.axis('off')
         plt.show()
-        plt.figure(figsize=(7, 4))
-        plt.hist(res.ravel(), bins=255, color='blue', alpha=0.7)
-        plt.title('Histogram of diff_mask After Opening')
-        plt.xlabel('Pixel Value')
-        plt.ylabel('Frequency')
-        #plt.show()
+        # plt.figure(figsize=(7, 4))
+        # plt.hist(res.ravel(), bins=255, color='blue', alpha=0.7)
+        # plt.title('Histogram of diff_mask After Opening')
+        # plt.xlabel('Pixel Value')
+        # plt.ylabel('Frequency')
+        # #plt.show()
     return res
 
 # If run as a script, preserve original behavior
 if __name__ == "__main__":
-    filepath = str(project_root / 'dataset_piccoli' / 'Scorre_verde' / 'Lettere_disallineate' / '*.png')
+    filepath, base_shape, _, recomposed_path = paths.define_files("parmareggio_ok",project_root)
     mat = scipy.io.loadmat(project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
     camera_matrix = mat['K']
     dist_coeffs = mat['dist']
@@ -167,5 +181,6 @@ if __name__ == "__main__":
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
     orb.detectAndCompute(frames[0], None)
     start = time.time()
-    res = run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, file_name=None, save_path=project_root / 'Reconstructed', show_plots=True)
+    res = run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, save_path=recomposed_path, 
+                                show_plots=True)
     print("Execution time is:", time.time() - start)

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 from pathlib import Path
-
+import paths
 project_root = Path(__file__).resolve().parent
 
 
@@ -26,7 +26,7 @@ def rescale_and_resize_mask(aligned_mask, mask_rect, target_rect, target_shape):
         if resized_mask.shape[0] > target_shape[0] or resized_mask.shape[1] > target_shape[1]:
             resized_mask = center_crop(resized_mask, target_shape)
         elif resized_mask.shape[0] < target_shape[0] or resized_mask.shape[1] < target_shape[1]:
-            resized_mask = center_pad(resized_mask, target_shape, pad_value=0)
+            resized_mask = center_pad(resized_mask, target_shape, pad_value=255)
         return resized_mask
     else:
         # If rectangles are not found, return the original mask
@@ -256,9 +256,9 @@ def compare_and_plot_masks(base_img, test_img, show_plots=False):
 
 
 if __name__ == "__main__":
-    # Paths to your images
-    base_path = str(project_root / "Schematics" / "green.png")
-    test_path = str(project_root / "Reconstructed" / "green_buco_in_piu.png")
-    base = cv2.imread(base_path)
-    test = cv2.imread(test_path)
+    scorre_path, base_shape_path, base_print_path, recomposed_path= paths.define_files("parmareggio_ok", project_root)  # Paths to the base and test images
+
+
+    base = cv2.imread(base_shape_path)
+    test = cv2.imread(recomposed_path)
     compare_and_plot_masks(base, test)

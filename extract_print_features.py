@@ -4,6 +4,7 @@ import numpy as np
 import time
 from pathlib import Path
 import Treshold_compare_masks as tcm
+import paths
 project_root = Path(__file__).resolve().parent
 
 def preprocess_for_canny(image):
@@ -83,7 +84,10 @@ def extract_print(schematic_img, picture_img, show_plots=True):
 
 
 if __name__ == "__main__":
-    base_img=cv2.imread(str(project_root / 'Schematics' / 'shapes'/'parmareggio.png'))  # Load the base image for comparison
-    test_img=cv2.imread(str(project_root / 'Reconstructed' / 'parmareggio_ok.png'))  # Load the test image
+
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmareggio_ok", project_root)  # Paths to the base and test images
+
+    base_img=cv2.imread(base_shape_path)  # Load the base image for comparison
+    test_img=cv2.imread(recomposed_path)  # Load the test image
     res=extract_print(base_img, test_img, show_plots=True)
-    cv2.imwrite(str(project_root / 'Schematics' / 'prints'/'parmareggio.png'), res * 255)  # Save the result as a binary mask
+    #cv2.imwrite(base_print_path, res * 255)  # Save the result as a binary mask

@@ -10,11 +10,13 @@ import Treshold_compare_masks as tcm
 import compare_prints_with_masks as cpm
 from skimage.morphology import skeletonize
 from skimage.measure import label, regionprops
+import paths
+import align_and_resize
 
 project_root = Path(__file__).resolve().parent
 
 #To do all the operations before calling the panorama funciton
-def call_panorama_pipeline(folder_path):
+def call_panorama_pipeline(folder_path,show_plots=False):
     #Load calibration data from the .mat file
     mat = scipy.io.loadmat(project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
     camera_matrix = mat['K']
@@ -37,37 +39,31 @@ def call_panorama_pipeline(folder_path):
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
     #Call it and compute execution time
     start = time.time()
-    res = panorama.run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plots=False)
+    res = panorama.run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plots,save_path=None)
     print("Execution time of panorama switching is:", time.time() - start)
     return res
 
 
-
-
 if __name__ == "__main__":
-    #folder_path = str(project_root / "dataset_piccoli" / "Scorre_verde" / "Lettere_disallineate" / "*.png")
     
     #Set the folder path for the images to be processed
-    folder_path = str(project_root / "dataset_medi" / "Scorre_Parmareggio_no" / "*.png")
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmareggio", project_root)
     torecompose = False  # Set to True if you want to recompute the panorama, False to use an existing image
     
     if torecompose:
 
-        recomposed=call_panorama_pipeline(folder_path)  # Call the panorama pipeline function
+        recomposed=call_panorama_pipeline(scorre_path,show_plots=True)  # Call the panorama pipeline function
         print("Panorama pipeline completed successfully.") #Just a message to indicate the process is done, 
                                                            #Can be removed
     else:
         #If you do not want to recompute the panorama, load the existing image
-        recomposed=cv2.imread(str(project_root / "Reconstructed" / "parmareggio_no.png"))
-        #cv2.imread(str(project_root / "dataset_piccoli" / "dezoommata_green_cut.png"))
-        #cv2.imread(str(project_root / "Reconstructed" / "green_buco_in_piu.png"))
+        recomposed=cv2.imread(recomposed_path, cv2.IMREAD_COLOR)  # Load the recomposed panorama image
     #Load the ok schematic image for comparison
-    base_shape=cv2.imread(str(project_root / 'Schematics' / 'shapes' /'parmareggio.png'),cv2.IMREAD_GRAYSCALE)  # Load the base image for comparison
+    base_shape=cv2.imread(base_shape_path,cv2.IMREAD_GRAYSCALE)  # Load the base image for comparison
 
     #Compute the difference mask between the recomposed panorama and the base shape
     #to find the bigger holes in the panorama
     test_mask,_,holes,_=tcm.compare_and_plot_masks(base_shape, recomposed,show_plots=True)  # Call the threshold comparison function
-
 
     contours, _ = cv2.findContours(holes, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     #Check if the contours found in the difference mask are significant 
@@ -88,7 +84,7 @@ if __name__ == "__main__":
     
     #Take the prints schematic and compare it with the recomposed panorama
     #to find smaller defects
-    base_print=cv2.imread(str(project_root / 'Schematics' / 'prints' /'parmareggio.png'),cv2.IMREAD_GRAYSCALE)  # Load the base print mask
+    base_print=cv2.imread(base_print_path,cv2.IMREAD_GRAYSCALE)  # Load the base print mask
     scratches=cpm.compare_prints_with_masks(base_print,recomposed, test_mask, show_plots=True)
 
     #Skeletonize the difference mask to clear out some noise
@@ -112,7 +108,7 @@ if __name__ == "__main__":
                 filtered_skeleton[coord[0], coord[1]] = 1
     #If there is no significant defect found in the skeletonized mask,
     #then the carton is ok
-    if filtered_skeleton.sum() == 0:
+    if filtered_skeleton.sum() < 200:
         print("No significant defects found in the skeletonized mask.")
     else:
         print(f"Found {filtered_skeleton.sum()} significant defects in the skeletonized mask.")
@@ -124,27 +120,15 @@ if __name__ == "__main__":
     plt.show()
     print("Comparison of prints with masks completed successfully.")
 
-
-        # --- Realign the initial image using the same procedure as in Treshold_compare_masks.py ---
-    # Preprocess the recomposed image to get contours
-    _, recomposed_contours, _ = tcm.preprocess(recomposed)
-    # Preprocess the base_shape to get contours and angle
-    _, base_contours, _ = tcm.preprocess(base_shape)
-    base_angle, _, base_rect = tcm.get_orientation_angle_and_rectangle(tcm.get_main_object_contour(base_contours, base_shape.shape))
-    recomposed_angle, recomposed_center, recomposed_rect = tcm.get_orientation_angle_and_rectangle(tcm.get_main_object_contour(recomposed_contours, recomposed.shape))
-    # Align recomposed image to base_shape orientation and center
-    aligned_img, recomposed_rect, _ = tcm.align_image_to_angle(recomposed, recomposed_contours, base_angle, (recomposed_angle, recomposed_center, recomposed_rect))
-    # Rescale and resize to match base_shape's rectangle and shape
-    aligned_img = tcm.rescale_and_resize_mask(aligned_img, recomposed_rect, base_rect, base_shape.shape[:2])
-    # Crop or pad if needed
-    if aligned_img.shape != base_shape.shape:
-        aligned_img = tcm.center_crop(aligned_img, base_shape.shape[:2])
-        if aligned_img.shape != base_shape.shape:
-            aligned_img = tcm.center_pad(aligned_img, base_shape.shape[:2], pad_value=0)
+     
+    # --- Realign the initial image using the same procedure as in Treshold_compare_masks.py ---
+    # Use the align_and_resize module for realignment
+    aligned_img, _, _, _ = align_and_resize.align_and_resize_images(base_shape, recomposed)
 
     # --- Plot holes and lines on the aligned image ---
     # Find holes (contours) that surpass min_defect_area
     hole_contours, _ = cv2.findContours(holes.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    hole_contours = [cnt for cnt in hole_contours if cv2.contourArea(cnt) < 0.9 * aligned_img.size]  # Filter contours based on area threshold
     holes_to_plot = []
     if hole_contours is not None:
         for cnt in hole_contours:
@@ -157,6 +141,7 @@ if __name__ == "__main__":
         if region.area >= min_length:
             for coord in region.coords:
                 lines_to_plot.append((coord[1], coord[0]))  # (x, y)
+
 
     # Plot the aligned image with holes and lines
     plt.figure(figsize=(10, 10))

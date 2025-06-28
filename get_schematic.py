@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 from pathlib import Path
-
+import paths
 project_root = Path(__file__).resolve().parent
 
 # Function to find a rectangle that approximates the main body, to find its orientation
@@ -102,10 +102,10 @@ def center_pad(img, target_shape):
 start = time.time()
 
 # Path to your image
-base_path = str(project_root / "Reconstructed" / "green_OK.png")
+_, base_shape_path, _, recomposed_path =paths.define_files("parmareggio_ok", project_root)  # Path to the base schematic image
 
 # Preprocess the image
-base_img, base_contours, base_thresh = preprocess(base_path)
+base_img, base_contours, base_thresh = preprocess(recomposed_path)
 
 # Align the mask to zero orientation
 aligned_base_thresh, base_rect, base_main_contour = align_image_to_least_rotation(base_thresh, base_contours)
@@ -128,5 +128,5 @@ plt.axis('off')
 plt.tight_layout()
 plt.show()
 
-cv2.imwrite(str(project_root / "Reconstructed" / "green.png"), aligned_base_thresh)
+cv2.imwrite(base_shape_path, aligned_base_thresh)
 print(f"Execution time: {time.time() - start:.2f} seconds")
