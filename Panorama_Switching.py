@@ -148,14 +148,50 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
         main_contour = tcm.get_main_object_contour(contours, gray.shape,area_thresh=0.7)
         mask = np.zeros_like(gray)
         cv2.drawContours(mask, [main_contour], -1, 255, thickness=cv2.FILLED)
-        # Set anything outside the main contour to 0
-        res[mask == 0] = 0
+        # Set anything outside the main contour to 0 (will be replaced if needed)
+        res_masked = res.copy()
+        res_masked[mask == 0] = 0
+        # Check for black pixels inside the contour
+        inside_mask = mask == 255
+        black_pixels_inside = np.all(res_masked[inside_mask] == [0,0,0], axis=-1).any()
+        if black_pixels_inside:
+            # Find unique colors inside the contour
+            unique_colors = np.unique(res[inside_mask].reshape(-1, 3), axis=0)
+            # Try to pick a color not present inside the contour
+            # For simplicity, try white, then blue, then green, then red
+            candidate_colors = [np.array([255,255,255], dtype=np.uint8),
+                               np.array([255,0,0], dtype=np.uint8),
+                               np.array([0,255,0], dtype=np.uint8),
+                               np.array([0,0,255], dtype=np.uint8)]
+            bg_color = None
+            for cand in candidate_colors:
+                if not np.any(np.all(unique_colors == cand, axis=1)):
+                    bg_color = cand
+                    break
+            if bg_color is None:
+                # If all candidates are present, pick a random color not present
+                for r in range(256):
+                    for g in range(256):
+                        for b in range(256):
+                            cand = np.array([b,g,r], dtype=np.uint8)
+                            if not np.any(np.all(unique_colors == cand, axis=1)):
+                                bg_color = cand
+                                break
+                        if bg_color is not None:
+                            break
+                    if bg_color is not None:
+                        break
+                if bg_color is None:
+                    bg_color = np.array([128,128,128], dtype=np.uint8) # fallback gray
+            res[mask == 0] = bg_color
+        else:
+            res[mask == 0] = 0
     # --- End mask logic ---
     if save_path is not None:
         cv2.imwrite(save_path, res)
     if show_plots:
         plt.figure(figsize=(15, 8))
-        plt.imshow(cv2.cvtColor(mask, cv2.COLOR_BGR2RGB))
+        plt.imshow(cv2.cvtColor(res, cv2.COLOR_BGR2RGB))
         plt.axis('off')
         plt.show()
         # plt.figure(figsize=(7, 4))
@@ -168,7 +204,7 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
 
 # If run as a script, preserve original behavior
 if __name__ == "__main__":
-    filepath, base_shape, _, recomposed_path = paths.define_files("parmareggio_ok",project_root)
+    filepath, base_shape, _, recomposed_path = paths.define_files("green_lettere_disallineate",project_root)
     mat = scipy.io.loadmat(project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
     camera_matrix = mat['K']
     dist_coeffs = mat['dist']

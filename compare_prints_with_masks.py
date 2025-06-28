@@ -3,16 +3,16 @@ import numpy as np
 import extract_print_features as epf
 import Treshold_compare_masks as tcm
 
-
 #Extract the print from the test image using the test mask,
 #and then compares it with the oen precomputed from the base mask.
 def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
-
+    import matplotlib.pyplot as plt
     # Extract the print from the test image using the test mask
-    test_print = epf.extract_print(test_mask, test_img, show_plots=False)
-    
+    test_print = epf.extract_print(test_mask, test_img, show_plots=True)
+    print("Test print shape:", test_print.shape)
     # Ensure test_print is the same size as base_mask 
     if base_mask.shape != test_print.shape:
+        print("Resizing test print to match base mask shape:", base_mask.shape)
         # Adding [:2] to get only the height and width,
         # should not be necessary as only color images have
         # 3 channels but just in case
@@ -24,13 +24,17 @@ def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
         elif test_print.shape[0] < target_shape[0] or test_print.shape[1] < target_shape[1]:
             # If it ended up smaller (had to zoom out), pad it with black stripes
             test_print = tcm.center_pad(test_print, target_shape, pad_value=0)
-        
         # If test_print is still not the right size (due to rounding), crop again.
         # This is a safeguard, usually not needed but can happen with some images,
         # but it is good to have it just in case.
         if test_print.shape != target_shape:
             test_print = tcm.center_crop(test_print, target_shape)
-            
+            plt.figure(figsize=(7, 7))
+    print("Test print resized to:", test_print.shape)
+    plt.imshow(test_print, cmap='gray')
+    plt.title("Test Print After Resizing")
+    plt.axis('off') 
+    plt.show()       
     # Dilate both masks to allow for tolerance in matching
     kernel = np.ones((15, 15), np.uint8)
     dil_base = cv2.dilate(base_mask, kernel, iterations=1)

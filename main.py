@@ -11,7 +11,6 @@ import compare_prints_with_masks as cpm
 from skimage.morphology import skeletonize
 from skimage.measure import label, regionprops
 import paths
-import align_and_resize
 
 project_root = Path(__file__).resolve().parent
 
@@ -47,7 +46,7 @@ def call_panorama_pipeline(folder_path,show_plots=False):
 if __name__ == "__main__":
     
     #Set the folder path for the images to be processed
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmareggio", project_root)
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_scratched", project_root)
     torecompose = False  # Set to True if you want to recompute the panorama, False to use an existing image
     
     if torecompose:
@@ -63,7 +62,7 @@ if __name__ == "__main__":
 
     #Compute the difference mask between the recomposed panorama and the base shape
     #to find the bigger holes in the panorama
-    test_mask,_,holes,_=tcm.compare_and_plot_masks(base_shape, recomposed,show_plots=True)  # Call the threshold comparison function
+    test_mask,_,holes,_=tcm.compare_and_plot_masks(base_shape, recomposed,show_plots=False)  # Call the threshold comparison function
 
     contours, _ = cv2.findContours(holes, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     #Check if the contours found in the difference mask are significant 
@@ -108,7 +107,7 @@ if __name__ == "__main__":
                 filtered_skeleton[coord[0], coord[1]] = 1
     #If there is no significant defect found in the skeletonized mask,
     #then the carton is ok
-    if filtered_skeleton.sum() < 200:
+    if filtered_skeleton.sum() < 500:
         print("No significant defects found in the skeletonized mask.")
     else:
         print(f"Found {filtered_skeleton.sum()} significant defects in the skeletonized mask.")
@@ -120,12 +119,30 @@ if __name__ == "__main__":
     plt.show()
     print("Comparison of prints with masks completed successfully.")
 
-     
-    # --- Realign the initial image using the same procedure as in Treshold_compare_masks.py ---
-    # Use the align_and_resize module for realignment
-    aligned_img, _, _, _ = align_and_resize.align_and_resize_images(base_shape, recomposed)
 
-    # --- Plot holes and lines on the aligned image ---
+
+        # --- Realign the initial image using the same procedure as in Treshold_compare_masks.py ---
+    import Treshold_compare_masks as tcm
+    # Preprocess both images
+    _, base_contours, _ = tcm.preprocess(base_shape)
+    test_img_proc, test_contours, test_thresh = tcm.preprocess(recomposed)
+    # Compute the tilting angles of both masks
+    base_angle, _, _ = tcm.get_orientation_angle_and_rectangle(tcm.get_main_object_contour(base_contours, base_shape.shape))
+    test_angle, test_center, test_rect = tcm.get_orientation_angle_and_rectangle(tcm.get_main_object_contour(test_contours, test_thresh.shape))
+    # Align the test mask to the base mask's orientation and center, using precomputed angle and center
+    target_angle = base_angle  # Always align test to base
+    aligned_img, test_rect, _ = tcm.align_image_to_angle(recomposed, test_contours, target_angle, (test_angle, test_center, test_rect))
+    # Use main object rectangles for scaling (adapt test to base)
+    base_rect = cv2.minAreaRect(tcm.get_main_object_contour(base_contours, base_shape.shape))
+    # Rescale and resize the test mask to match the base mask's rectangle and shape
+    target_shape = base_shape.shape[:2]
+    aligned_img = tcm.rescale_and_resize_mask(aligned_img, test_rect, base_rect, target_shape, pad_value=[0,0,0])
+
+    # Plot the aligned image with holes and lines
+    plt.figure(figsize=(10, 10))
+    plt.imshow(cv2.cvtColor(aligned_img, cv2.COLOR_BGR2RGB))
+
+        # --- Plot holes and lines on the aligned image ---
     # Find holes (contours) that surpass min_defect_area
     hole_contours, _ = cv2.findContours(holes.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     hole_contours = [cnt for cnt in hole_contours if cv2.contourArea(cnt) < 0.9 * aligned_img.size]  # Filter contours based on area threshold
@@ -142,10 +159,6 @@ if __name__ == "__main__":
             for coord in region.coords:
                 lines_to_plot.append((coord[1], coord[0]))  # (x, y)
 
-
-    # Plot the aligned image with holes and lines
-    plt.figure(figsize=(10, 10))
-    plt.imshow(cv2.cvtColor(aligned_img, cv2.COLOR_BGR2RGB))
     # Plot holes
     for cnt in holes_to_plot:
         cnt = cnt.reshape(-1, 2)
@@ -161,3 +174,4 @@ if __name__ == "__main__":
     plt.legend(by_label.values(), by_label.keys())
     plt.show()
     print("Final visualization with holes and lines completed.")
+

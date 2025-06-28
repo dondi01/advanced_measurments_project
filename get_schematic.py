@@ -35,14 +35,22 @@ def get_main_object_contour(contours, image_shape, area_thresh=0.99):
         return None
     return max(filtered, key=cv2.contourArea)
 
-# Takes the image path, reads the image, lightens it, converts it to grayscale,
-# blurs it, and thresholds it to create a binary mask.
 def preprocess(image_path):
-    image = cv2.imread(image_path)
+    image=cv2.imread(image_path)
+    # Extract contours and thresholded mask from the image.
     lightened = cv2.convertScaleAbs(image, alpha=1, beta=100)
-    gray = cv2.cvtColor(lightened, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (21, 21), 0)
-    thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    # If image is grayscale, convert to 3-channel for consistency
+    if len(lightened.shape) == 2 or lightened.shape[2] == 1:
+        lightened = cv2.cvtColor(lightened, cv2.COLOR_GRAY2BGR)
+    # Compute std for each channel and pick the one with the highest std
+    stds = [np.std(lightened[:, :, i]) for i in range(3)]
+    best_channel = np.argmax(stds)
+    channel_img = lightened[:, :, best_channel]
+    # Blurring and thresholding to get a binary mask
+    blurred = cv2.GaussianBlur(channel_img, (41, 41), 0)
+    thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)[1]
+    
+    # Find its contours
     contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     return image, contours, thresh
 
@@ -102,7 +110,7 @@ def center_pad(img, target_shape):
 start = time.time()
 
 # Path to your image
-_, base_shape_path, _, recomposed_path =paths.define_files("parmareggio_ok", project_root)  # Path to the base schematic image
+_, base_shape_path, _, recomposed_path =paths.define_files("green_ok", project_root)  # Path to the base schematic image
 
 # Preprocess the image
 base_img, base_contours, base_thresh = preprocess(recomposed_path)

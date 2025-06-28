@@ -41,7 +41,7 @@ def extract_print(schematic_img, picture_img, show_plots=True):
     aligned_test_canny, test_rect, test_main_contour = tcm.align_image_to_angle(test_canny, test_contours, best_axis)
     # Use tcm's robust scaling and resizing logic
     target_shape = aligned_base_canny.shape[:2]
-    aligned_test_canny = tcm.rescale_and_resize_mask(aligned_test_canny, test_rect, base_rect, target_shape)
+    aligned_test_canny = tcm.rescale_and_resize_mask(aligned_test_canny, test_rect, base_rect, target_shape,pad_value=0)
     # Ensure the masks have the same size
     if aligned_base_canny.shape != aligned_test_canny.shape:
         min_h = min(aligned_base_canny.shape[0], aligned_test_canny.shape[0])
@@ -85,9 +85,9 @@ def extract_print(schematic_img, picture_img, show_plots=True):
 
 if __name__ == "__main__":
 
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmareggio_ok", project_root)  # Paths to the base and test images
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_ok", project_root)  # Paths to the base and test images
 
     base_img=cv2.imread(base_shape_path)  # Load the base image for comparison
     test_img=cv2.imread(recomposed_path)  # Load the test image
     res=extract_print(base_img, test_img, show_plots=True)
-    #cv2.imwrite(base_print_path, res * 255)  # Save the result as a binary mask
+    cv2.imwrite(base_print_path, res * 255)  # Save the result as a binary mask
