@@ -11,7 +11,6 @@ import compare_prints_with_masks as cpm
 from skimage.morphology import skeletonize
 from skimage.measure import label, regionprops
 import paths
-import align_and_resize
 
 project_root = Path(__file__).resolve().parent
 
@@ -47,7 +46,7 @@ def call_panorama_pipeline(folder_path,show_plots=False):
 if __name__ == "__main__":
     
     #Set the folder path for the images to be processed
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmareggio", project_root)
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_buco_in_meno", project_root)
     torecompose = False  # Set to True if you want to recompute the panorama, False to use an existing image
     
     if torecompose:
@@ -121,14 +120,26 @@ if __name__ == "__main__":
     print("Comparison of prints with masks completed successfully.")
 
      
-    # --- Realign the initial image using the same procedure as in Treshold_compare_masks.py ---
-    # Use the align_and_resize module for realignment
-    aligned_img, _, _, _ = align_and_resize.align_and_resize_images(base_shape, recomposed)
+ # --- Realign the initial image using the same procedure as in Treshold_compare_masks.py ---Add commentMore actions
+    # Preprocess the recomposed image to get contours
+    _, recomposed_contours, _ = tcm.preprocess(recomposed)
+    # Preprocess the base_shape to get contours and angle
+    _, base_contours, _ = tcm.preprocess(base_shape)
+    base_angle, _, base_rect = tcm.get_orientation_angle_and_rectangle(tcm.get_main_object_contour(base_contours, base_shape.shape))
+    recomposed_angle, recomposed_center, recomposed_rect = tcm.get_orientation_angle_and_rectangle(tcm.get_main_object_contour(recomposed_contours, recomposed.shape))
+    # Align recomposed image to base_shape orientation and center
+    aligned_img, recomposed_rect, _ = tcm.align_image_to_angle(recomposed, recomposed_contours, base_angle, (recomposed_angle, recomposed_center, recomposed_rect))
+    # Rescale and resize to match base_shape's rectangle and shape
+    aligned_img = tcm.rescale_and_resize_mask(aligned_img, recomposed_rect, base_rect, base_shape.shape[:2])
+    # Crop or pad if needed
+    if aligned_img.shape != base_shape.shape:
+        aligned_img = tcm.center_crop(aligned_img, base_shape.shape[:2])
+        if aligned_img.shape != base_shape.shape:
+            aligned_img = tcm.center_pad(aligned_img, base_shape.shape[:2], pad_value=0)
 
     # --- Plot holes and lines on the aligned image ---
     # Find holes (contours) that surpass min_defect_area
     hole_contours, _ = cv2.findContours(holes.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    hole_contours = [cnt for cnt in hole_contours if cv2.contourArea(cnt) < 0.9 * aligned_img.size]  # Filter contours based on area threshold
     holes_to_plot = []
     if hole_contours is not None:
         for cnt in hole_contours:
@@ -141,7 +152,6 @@ if __name__ == "__main__":
         if region.area >= min_length:
             for coord in region.coords:
                 lines_to_plot.append((coord[1], coord[0]))  # (x, y)
-
 
     # Plot the aligned image with holes and lines
     plt.figure(figsize=(10, 10))

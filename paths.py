@@ -22,7 +22,7 @@ def define_files(name,project_root):
             scorre_path = " "
             base_shape_path = str(project_root / 'Schematics' / 'shapes' /"green.png")
             base_print_path = str(project_root / 'Schematics' / 'prints' /"green.png")
-            recomposed_path = str(project_root / "dataset_piccoli" / "dezoommata_green.png")
+            recomposed_path = str(project_root / "dataset_piccoli" / "dezoommata_green_cut.png")
         case "green_buco_in_piu":
             scorre_path = " str(project_root / 'dataset_piccoli' / 'Scorre_verde' / 'Buco_in_piu' / '*.png')"
             base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'green.png')
