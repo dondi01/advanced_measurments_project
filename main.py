@@ -46,7 +46,7 @@ def call_panorama_pipeline(folder_path,show_plots=False):
 if __name__ == "__main__":
     
     #Set the folder path for the images to be processed
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_buco_in_meno", project_root)
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmigiano", project_root)
     torecompose = False  # Set to True if you want to recompute the panorama, False to use an existing image
     
     if torecompose:
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     #Take the prints schematic and compare it with the recomposed panorama
     #to find smaller defects
     base_print=cv2.imread(base_print_path,cv2.IMREAD_GRAYSCALE)  # Load the base print mask
-    scratches=cpm.compare_prints_with_masks(base_print,recomposed, test_mask, show_plots=True)
+    scratches=cpm.compare_prints_with_masks(base_print,recomposed, test_mask, show_plots=False)
 
     #Skeletonize the difference mask to clear out some noise
     #and to prepare it for further analysis
@@ -107,7 +107,7 @@ if __name__ == "__main__":
                 filtered_skeleton[coord[0], coord[1]] = 1
     #If there is no significant defect found in the skeletonized mask,
     #then the carton is ok
-    if filtered_skeleton.sum() < 200:
+    if filtered_skeleton.sum() < 500:
         print("No significant defects found in the skeletonized mask.")
     else:
         print(f"Found {filtered_skeleton.sum()} significant defects in the skeletonized mask.")
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     # Align recomposed image to base_shape orientation and center
     aligned_img, recomposed_rect, _ = tcm.align_image_to_angle(recomposed, recomposed_contours, base_angle, (recomposed_angle, recomposed_center, recomposed_rect))
     # Rescale and resize to match base_shape's rectangle and shape
-    aligned_img = tcm.rescale_and_resize_mask(aligned_img, recomposed_rect, base_rect, base_shape.shape[:2])
+    aligned_img = tcm.rescale_and_resize_mask(aligned_img, recomposed_rect, base_rect, base_shape.shape[:2],pad_value=0)
     # Crop or pad if needed
     if aligned_img.shape != base_shape.shape:
         aligned_img = tcm.center_crop(aligned_img, base_shape.shape[:2])

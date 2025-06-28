@@ -7,7 +7,7 @@ import paths
 project_root = Path(__file__).resolve().parent
 
 
-def rescale_and_resize_mask(aligned_mask, mask_rect, target_rect, target_shape):
+def rescale_and_resize_mask(aligned_mask, mask_rect, target_rect, target_shape,pad_value=255):
     # Rescale and resize a mask so that its main object's rectangle matches the target rectangle's size,
     # then crop or pad to the target shape. Used for robust geometric normalization.
     if mask_rect is not None and target_rect is not None:
@@ -26,7 +26,7 @@ def rescale_and_resize_mask(aligned_mask, mask_rect, target_rect, target_shape):
         if resized_mask.shape[0] > target_shape[0] or resized_mask.shape[1] > target_shape[1]:
             resized_mask = center_crop(resized_mask, target_shape)
         elif resized_mask.shape[0] < target_shape[0] or resized_mask.shape[1] < target_shape[1]:
-            resized_mask = center_pad(resized_mask, target_shape, pad_value=255)
+            resized_mask = center_pad(resized_mask, target_shape, pad_value)
         return resized_mask
     else:
         # If rectangles are not found, return the original mask
@@ -70,22 +70,23 @@ def get_main_object_contour(contours, image_shape, area_thresh=0.9):
     return max(filtered, key=cv2.contourArea)
 
 def preprocess(image):
-    
-    #Extract contours and thresholded mask from the image.
+    # Extract contours and thresholded mask from the image.
     lightened = cv2.convertScaleAbs(image, alpha=1, beta=100)
-    try:
-        # Convert to grayscale, if the image is not already in grayscale
-        gray = cv2.cvtColor(lightened, cv2.COLOR_BGR2GRAY)
-    except cv2.error:
-        #If the image is already grayscale, just use it as is (cv2 will 
-        #raise an error if trying to convert a grayscale image to grayscale)
-        gray=lightened
-    #Blurring and thresholding to get a binary mask
-    blurred = cv2.GaussianBlur(gray, (31, 31), 0)
+    # If image is grayscale, convert to 3-channel for consistency
+    if len(lightened.shape) == 2 or (len(lightened.shape) == 3 and lightened.shape[2] == 1):
+        lightened = cv2.cvtColor(lightened, cv2.COLOR_GRAY2BGR)
+    # Compute std for each channel and pick the one with the highest std
+    stds = [np.std(lightened[:, :, i]) for i in range(3)]
+    best_channel = np.argmax(stds)
+    channel_img = lightened[:, :, best_channel]
+    # Blurring and thresholding to get a binary mask
+    blurred = cv2.GaussianBlur(channel_img, (31, 31), 0)
     thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-    #Find its contours
+    #Remove small noise
+    kernel = np.ones((9, 9), np.uint8)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    # Find its contours
     contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    
     return image, contours, thresh
 
 def align_image_to_angle(img, contours, target_angle, angle_and_center=None):
@@ -209,7 +210,7 @@ def compare_and_plot_masks(base_img, test_img, show_plots=False):
     diff_mask = cv2.absdiff(aligned_base_thresh, aligned_test_thresh)
 
     #clean up small noise
-    kernel = np.ones((21, 21), np.uint8)
+    kernel = np.ones((11,11), np.uint8)
     diff_mask = cv2.morphologyEx(diff_mask, cv2.MORPH_OPEN, kernel)
 
     ## Print execution time for the comparison
@@ -259,6 +260,6 @@ if __name__ == "__main__":
     scorre_path, base_shape_path, base_print_path, recomposed_path= paths.define_files("parmareggio_ok", project_root)  # Paths to the base and test images
 
 
-    base = cv2.imread(base_shape_path)
+    base = cv2.imread(base_shape_path,cv2.IMREAD_GRAYSCALE)
     test = cv2.imread(recomposed_path)
-    compare_and_plot_masks(base, test)
+    compare_and_plot_masks(base, test, show_plots=True)
