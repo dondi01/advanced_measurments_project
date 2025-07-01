@@ -46,7 +46,7 @@ def call_panorama_pipeline(folder_path,show_plots=False):
 if __name__ == "__main__":
     
     #Set the folder path for the images to be processed
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmigiano", project_root)
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("nappies", project_root)
     torecompose = False  # Set to True if you want to recompute the panorama, False to use an existing image
     
     if torecompose:
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     #Take the prints schematic and compare it with the recomposed panorama
     #to find smaller defects
     base_print=cv2.imread(base_print_path,cv2.IMREAD_GRAYSCALE)  # Load the base print mask
-    scratches=cpm.compare_prints_with_masks(base_print,recomposed, test_mask, show_plots=False)
+    scratches=cpm.compare_prints_with_masks(base_print,recomposed, test_mask, show_plots=True)
 
     #Skeletonize the difference mask to clear out some noise
     #and to prepare it for further analysis

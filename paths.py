@@ -46,8 +46,16 @@ def define_files(name,project_root):
             base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'green.png')
             base_print_path = str(project_root / 'Schematics' / 'prints' / 'green.png')
             recomposed_path = str(project_root / "Reconstructed" / "green_OK.png")
-
-                
+        case "nappies_ok":
+            scorre_path = None
+            base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'nappies.png')
+            base_print_path = str(project_root / 'Schematics' / 'prints' / 'nappies.png')
+            recomposed_path = str(project_root / "Reconstructed" / "nappies_ok.png")   
+        case "marrone":
+            scorre_path = str(project_root / 'dataset_piccoli' / 'Scorre_marrone' / '*.png')
+            base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'marrone.png')
+            base_print_path = str(project_root / 'Schematics' / 'prints' / 'marrone.png')
+            recomposed_path = str(project_root / "Reconstructed" / "marrone.png") 
         case _:
             raise ValueError(f"Unknown name: {name}. Please provide a valid name.")
     return scorre_path, base_shape_path, base_print_path, recomposed_path

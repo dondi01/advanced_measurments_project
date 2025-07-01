@@ -155,7 +155,7 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
         cv2.imwrite(save_path, res)
     if show_plots:
         plt.figure(figsize=(15, 8))
-        plt.imshow(cv2.cvtColor(mask, cv2.COLOR_BGR2RGB))
+        plt.imshow(cv2.cvtColor(res, cv2.COLOR_BGR2RGB))
         plt.axis('off')
         plt.show()
         # plt.figure(figsize=(7, 4))
@@ -168,7 +168,7 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
 
 # If run as a script, preserve original behavior
 if __name__ == "__main__":
-    filepath, base_shape, _, recomposed_path = paths.define_files("parmareggio_ok",project_root)
+    filepath, base_shape, _, recomposed_path = paths.define_files("marrone",project_root)
     mat = scipy.io.loadmat(project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
     camera_matrix = mat['K']
     dist_coeffs = mat['dist']

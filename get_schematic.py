@@ -92,7 +92,7 @@ def center_pad(img, target_shape):
 start = time.time()
 
 # Path to your image
-_, base_shape_path, _, recomposed_path =paths.define_files("green_ok", project_root)  # Path to the base schematic image
+_, base_shape_path, _, recomposed_path =paths.define_files("nappies_ok", project_root)  # Path to the base schematic image
 
 recomposed = cv2.imread(recomposed_path, cv2.IMREAD_GRAYSCALE)
 # Preprocess the image
