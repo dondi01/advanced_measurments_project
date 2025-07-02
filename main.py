@@ -46,7 +46,7 @@ def call_panorama_pipeline(folder_path,show_plots=False):
 if __name__ == "__main__":
     
     #Set the folder path for the images to be processed
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("nappies", project_root)
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("nappies_misprint", project_root)
     torecompose = False  # Set to True if you want to recompute the panorama, False to use an existing image
     
     if torecompose:

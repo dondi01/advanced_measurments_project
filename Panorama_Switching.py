@@ -33,7 +33,7 @@ def apply_feather(feather, warped, panorama, C) -> np.ndarray:
 
 # Main panorama pipeline, takes frames, orb, bf, camera_matrix, dist_coeffs as input
 def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plots=True, save_path=None):
-    frames = frames[::2]
+    #frames = frames[::2]
     frames = [cv2.undistort(f, camera_matrix, dist_coeffs) for f in frames]
     crop_w, crop_h = 1556, 1052
     H, W, C = frames[0].shape
@@ -168,7 +168,7 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
 
 # If run as a script, preserve original behavior
 if __name__ == "__main__":
-    filepath, base_shape, _, recomposed_path = paths.define_files("marrone",project_root)
+    filepath, base_shape, _, recomposed_path = paths.define_files("nappies_misprint",project_root)
     mat = scipy.io.loadmat(project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
     camera_matrix = mat['K']
     dist_coeffs = mat['dist']
