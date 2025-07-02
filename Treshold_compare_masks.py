@@ -214,7 +214,7 @@ def compare_and_plot_masks(base_img, test_img, show_plots=False):
     diff_mask = cv2.morphologyEx(diff_mask, cv2.MORPH_OPEN, kernel)
 
     ## Print execution time for the comparison
-    print(f"Execution time of compare masks: {time.time() - start:.2f} seconds")
+    #print(f"Execution time of compare masks: {time.time() - start:.2f} seconds")
 
     if show_plots:
         # Plot the aligned base mask, aligned test mask, and difference mask

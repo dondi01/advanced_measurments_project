@@ -79,7 +79,7 @@ def extract_print(schematic_img, picture_img, show_plots=True):
         plt.axis('off')
         plt.show()
     
-    print(f"Execution time of extract_print: {time.time() - start:.2f} seconds")
+    #print(f"Execution time of extract_print: {time.time() - start:.2f} seconds")
     return diff_fuzzy
 
 

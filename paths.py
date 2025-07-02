@@ -8,6 +8,12 @@ def define_files(name,project_root):
             base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'parmareggio.png')
             base_print_path = str(project_root / 'Schematics' / 'prints' / 'parmareggio.png')
             recomposed_path = str(project_root / "Reconstructed" / "parmareggio_no.png")
+
+        case "parmareggio_bucato":
+            scorre_path= None
+            base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'parmareggio.png')
+            base_print_path = str(project_root / 'Schematics' / 'prints' / 'parmareggio.png')
+            recomposed_path = str(project_root / "Reconstructed" / "parmareggio_bucato.png")
         case "parmareggio_ok":
             scorre_path = str(project_root / "dataset_medi" / "Scorre_Parmareggio_ok" / "*.png")
             base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'parmareggio.png')

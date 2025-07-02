@@ -18,7 +18,7 @@ def get_orientation_angle_and_rectangle(contour):
         main_axis_angle = angle
     else:  # If the height is greater, rotate by 90 degrees to align horizontally
         main_axis_angle = angle + 90
-
+    #print("width:", width, "height:", height, "angle:", angle, "main_axis_angle:", main_axis_angle)
     # Normalize to [-90, 90)
     main_axis_angle = main_axis_angle % 180
     if main_axis_angle >= 90:
@@ -88,35 +88,36 @@ def center_pad(img, target_shape):
     )
     return img
 
-# Start processing
-start = time.time()
+if __name__ == "__main__":
+    # Start processing
+    start = time.time()
 
-# Path to your image
-_, base_shape_path, _, recomposed_path =paths.define_files("nappies_ok", project_root)  # Path to the base schematic image
+    # Path to your image
+    _, base_shape_path, _, recomposed_path =paths.define_files("green_ok", project_root)  # Path to the base schematic image
 
-recomposed = cv2.imread(recomposed_path, cv2.IMREAD_GRAYSCALE)
-# Preprocess the image
-base_img, base_contours, base_thresh = tcm.preprocess(recomposed)
-# Align the mask to zero orientation
-aligned_base_thresh, base_rect, base_main_contour = align_image_to_least_rotation(base_thresh, base_contours)
+    recomposed = cv2.imread(recomposed_path, cv2.IMREAD_GRAYSCALE)
+    # Preprocess the image
+    base_img, base_contours, base_thresh = tcm.preprocess(recomposed)
+    # Align the mask to zero orientation
+    aligned_base_thresh, base_rect, base_main_contour = align_image_to_least_rotation(base_thresh, base_contours)
 
-# Plot the results
-plt.figure(figsize=(10, 6))
+    # Plot the results
+    plt.figure(figsize=(10, 6))
 
-# Original mask
-plt.subplot(1, 2, 1)
-plt.imshow(base_thresh, cmap='gray')
-plt.title('Original Mask')
-plt.axis('off')
+    # Original mask
+    plt.subplot(1, 2, 1)
+    plt.imshow(base_thresh, cmap='gray')
+    plt.title('Original Mask')
+    plt.axis('off')
 
-# Aligned mask
-plt.subplot(1, 2, 2)
-plt.imshow(aligned_base_thresh, cmap='gray')
-plt.title('Aligned Mask')
-plt.axis('off')
+    # Aligned mask
+    plt.subplot(1, 2, 2)
+    plt.imshow(aligned_base_thresh, cmap='gray')
+    plt.title('Aligned Mask')
+    plt.axis('off')
 
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
 
-cv2.imwrite(base_shape_path, aligned_base_thresh)
-print(f"Execution time: {time.time() - start:.2f} seconds")
+    #cv2.imwrite(base_shape_path, aligned_base_thresh)
+    print(f"Execution time: {time.time() - start:.2f} seconds")

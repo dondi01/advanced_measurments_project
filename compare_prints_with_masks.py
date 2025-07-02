@@ -32,7 +32,8 @@ def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
             test_print = tcm.center_crop(test_print, target_shape)
             
     # Dilate both masks to allow for tolerance in matching
-    kernel = np.ones((21, 21), np.uint8)
+    #kernel = np.ones((21, 21), np.uint8)
+    kernel= np.ones((31, 31), np.uint8)  # Smaller kernel for less aggressive dilation
     dil_base = cv2.dilate(base_mask, kernel, iterations=1)
     dil_test = cv2.dilate(test_print, kernel, iterations=1)
 
