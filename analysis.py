@@ -23,8 +23,11 @@ test_brown = cv2.cvtColor(test_brown, cv2.COLOR_BGR2GRAY)
 test_brown_blurred = cv2.medianBlur(test_brown, 11)
 test_subtracted = cv2.subtract(test_brown, test_brown_blurred)
 test_subtracted = cv2.threshold(test_subtracted, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-test_subtracted = iterative_transformer(test_subtracted, 100, (100,100), (51,51))
-test_subtracted = cv2.Canny(test_subtracted, 100, 200)
+
+#test_subtracted = iterative_transformer(test_subtracted, 100, (100,100), (51,51))
+#test_subtracted = cv2.Canny(test_subtracted, 100, 200)
+
+
 #test_subtracted = cv2.cvtColor(test_subtracted, cv2.COLOR_YCrCb2GRAY)
 plt.figure(figsize=(12, 6))
 plt.subplot(1, 2, 1)

@@ -28,3 +28,5 @@
 *.zip
 *.mat
 *.lprof
+/Carton Defect Dataset
+*.pyc
