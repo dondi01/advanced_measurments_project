@@ -5,8 +5,8 @@ FROM tensorflow/tensorflow:2.19.0-gpu
 WORKDIR /app
 
 # Install any needed packages specified in requirements.txt
-COPY requirements.txt /app
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements_revised.txt /app
+RUN pip install --no-cache-dir -r requirements_revised.txt
 
 # Copy the current directory contents into the container
 COPY . /app
