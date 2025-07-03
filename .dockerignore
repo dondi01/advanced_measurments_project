@@ -1,0 +1,25 @@
+
+# Git or environment files
+**/.git
+**/node_modules
+**/.vscode
+**/.venv
+
+
+# Data files and directories
+**/data
+**/dataset_medi
+**/dataset_piccoli
+**/ml_datasets
+**/Old_Reconstructions
+**/Reconstructed
+**/Schematics
+
+
+#File types
+*.log
+*.tmp
+*.zip
+*.png
+*.jpg
+*.jpeg
