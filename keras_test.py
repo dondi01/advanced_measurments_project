@@ -90,7 +90,7 @@ validation_dataset = tf.keras.utils.image_dataset_from_directory(
 
 if train_model_flag:
     model, history = train_model(INPUT_SIZE, training_dataset, validation_dataset)
-    model.save("test.keras")
+    model.save(str(project_root / 'cnn_models' /'test.keras'))
 
     acc = history.history['binary_accuracy']
     val_acc = history.history['val_binary_accuracy']
@@ -115,11 +115,11 @@ if train_model_flag:
     plt.ylim([0,1.0])
     plt.title('Training and Validation Loss')
     plt.xlabel('epoch')
-    plt.savefig("training_plot.png")
+    plt.savefig(str(project_root / 'plots' /'training_plot.png'))
     plt.close()
     #plt.show()
 else:
-    model = tf.keras.models.load_model("test.keras")
+    model = tf.keras.models.load_model(str(project_root / 'cnn_models' /'test.keras'))
     print("Model loaded from file.")
     
 
