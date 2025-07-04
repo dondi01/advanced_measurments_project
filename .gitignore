@@ -30,3 +30,6 @@
 *.lprof
 /Carton Defect Dataset
 *.pyc
+
+#ignore models 
+*.keras\

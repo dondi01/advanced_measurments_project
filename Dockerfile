@@ -5,6 +5,9 @@ FROM tensorflow/tensorflow:2.19.0-gpu
 WORKDIR /app
 
 # Install any needed packages specified in requirements.txt
+RUN apt-get update && apt-get install -y libgl1
+RUN python -m pip install --upgrade pip
+
 COPY requirements_revised.txt /app
 RUN pip install --no-cache-dir -r requirements_revised.txt
 
