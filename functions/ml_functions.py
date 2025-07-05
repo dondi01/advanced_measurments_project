@@ -7,6 +7,7 @@ import re
 import os
 from pathlib import Path
 
+image_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.gif']
 
 def center_crop(img, dim):
 	"""Returns center cropped image
@@ -65,7 +66,7 @@ def generate_windows(image_index, image, window_size, stride, output_path):
     for i, (x, y, window) in enumerate(sliding_window(image, window_size, stride)):
         window_h, window_w = window_size
         cropped_image = image[x:x + window_w, y:y + window_h] # Slicing to crop the image
-        final_output_path = str(Path(output_path)/ str(f'{image_index}_window_{i}_at_{x}_{y}.png'))
+        final_output_path = str(Path(output_path)/ str(f'window_{image_index}_at_{x}_{y}.png'))
         cv2.imwrite(final_output_path, cropped_image)
 
 def preprocess_image(image, window_size, stride): #used for training with "carton dataset"
@@ -79,19 +80,42 @@ def preprocess_image(image, window_size, stride): #used for training with "carto
 
 # Show all windows on the image
 def generate_windowed_dataset(input_path, window_size, stride, output_path):
-    i = 0
     for image in Path(input_path).iterdir():
+        image_index = parse_input_filename(image)  # Extract the index from the filename
         image = cv2.imread(str(image))
         image = preprocess_image(image, window_size, stride)
-        generate_windows(i, image, window_size, stride, output_path)
-        i = i + 1
+        generate_windows(image_index, image, window_size, stride, output_path)
 
 
 
-def parse_filename_py(file_path):
+def rename_files_in_dataset(directory, classification, i): # useful for linking pre and post windowed datasets
+    j = 0
+    for file_path in Path(directory).iterdir(): # temp name to reset names
+        temp_name = f"{j}{file_path.suffix.lower()}"
+        new_path = file_path.parent / temp_name
+        file_path.rename(new_path)
+        j += 1
+
+    if classification not in ['healthy', 'faulty']:
+        raise ValueError("Classification must be either 'healthy' or 'faulty'.")
+    elif classification == 'healthy':
+        classification = 'h'
+    else:
+        classification = 'f'
+    for file_path in Path(directory).iterdir():
+        if file_path.is_file() and file_path.suffix.lower() in image_extensions:
+            new_name = f"{classification}_c{i}{file_path.suffix.lower()}"  # Create new name with class and index
+            new_path = file_path.parent / new_name
+            file_path.rename(new_path)
+            print(f"Renamed {file_path} to {new_name}")
+            i += 1
+    return i  # Return the next index so next call for the next class we have an unanbiguos index
+
+
+def parse_windowed_filename_py(file_path):
     #filename = file_path.split('\\')[-1] # path has alreaby been converted to string
     filename = os.path.basename(file_path)
-    pattern = r'\d+_window_(\d+)_at_(\d+)_(\d+)\.png'
+    pattern = r'window_(\d+)_at_(\d+)_(\d+)\.png'
     match = re.match(pattern, filename)
     if match:
         return [int(match.group(1)), int(match.group(2)), int(match.group(3))]
@@ -99,8 +123,19 @@ def parse_filename_py(file_path):
         print(f"WARNING: Filename {filename} does not match the expected pattern.")
         return [0, 0, 0]
 
-def parse_filename(file_path):
-    return tf.py_function(parse_filename_py, [file_path], [tf.int32, tf.int32, tf.int32])
+
+def parse_input_filename(file_path):
+    filename = os.path.basename(file_path)
+    pattern = r'^[hf]_c(\d+)\.[a-z]+$'
+    match = re.match(pattern, filename)
+    if match:
+        return int(match.group(1))
+    else:
+        print(f"WARNING: Filename {filename} does not match the expected pattern.")
+        return 0
+    
+#def parse_filename(file_path):
+#    return tf.py_function(parse_filename_py, [file_path], [tf.int32, tf.int32, tf.int32])
 
 
 
@@ -114,7 +149,7 @@ def process_path_py(file_path, image_size):
         label = 0
     else:
         label = 1
-    i, x, y = parse_filename_py(file_path)
+    i, x, y = parse_windowed_filename_py(file_path)
     return img, label, i, x, y
 
 def process_path(file_path, image_size):
@@ -132,6 +167,7 @@ def process_path(file_path, image_size):
     metadata = (i, x, y)
     return img, label, metadata
 
+
 def get_training_validation_datasets(input_path, batch_size, image_size):
     list_ds = tf.data.Dataset.list_files(str(Path(input_path) / '**' / '*.png'), shuffle=True)
     num_files = len(list(list_ds.as_numpy_iterator()))
@@ -144,18 +180,50 @@ def get_training_validation_datasets(input_path, batch_size, image_size):
     validation_dataset = extracted_ds.skip(train_size).take(validation_size).batch(batch_size)
 
     #debug printing
-    for batch in validation_dataset.take(1):
-        print("Batch content:")
-        print(batch)
+    #for batch in validation_dataset.take(1):
+    #    print("Batch content:")
+    #    print(batch)
     return training_dataset, validation_dataset
 
 
+def find_image_path_and_shape(parent_folder_path, i):
+    # Iterate through the subdirectories in the parent folder
+    for root, dirs, files in os.walk(parent_folder_path):
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
+            # Check if the file matches the index
+            if parse_input_filename(file_path) == i:
+                # Open the image and get its shape
+                image = cv2.imread(file_path)
+                if image is not None:
+                    height, width = image.shape[:2]
+                    return file_path, width, height
 
-def get_original_dimensions(unprocessed_images_path): # returns original dimensions (prior to windowing) for mask reassembly
-    original_dimensions = []
-    for image_path in unprocessed_images_path.iterdir():
-        if image_path.is_file() and image_path.suffix.lower() in ['.png', '.jpg', '.jpeg']:
-            img = cv2.imread(str(image_path))
-            if img is not None:
-                original_dimensions.append(img.shape[:2])
-    return original_dimensions
+
+def empty_directory(directory):
+    """Deletes all files in the specified directory."""
+    for file_path in Path(directory).iterdir():
+        if file_path.is_file():
+            file_path.unlink()  # Delete the file
+    print(f"All files in {directory} have been deleted.")
+
+def overlay_and_save(original_image_path, mask, output_path):
+
+
+    # Load the original image
+    original_image = cv2.imread(str(original_image_path))
+    original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)  # Convert to RGB for Matplotlib
+
+    # Overlay the mask on the original image
+    overlay = np.zeros_like(original_image)
+    overlay[mask == 255] = [255, 0, 0]  # Mark faulty areas in red
+    result = cv2.addWeighted(original_image, 0.8, overlay, 0.2, 0)
+
+    # Save the result
+    plt.imsave(output_path, result)
+
+
+def transform_coordinates(x, y, original_width, original_height, INPUT_SIZE, scale_factor): #takes into account cropping and scaling for reconstruction of the position of the detected faulty area in the original image
+    x_t = int((original_width / 2) - (INPUT_SIZE[0] / 2) + (x / scale_factor))
+    y_t = int((original_height / 2) - (INPUT_SIZE[1] / 2) + (y / scale_factor))
+    return x_t, y_t
