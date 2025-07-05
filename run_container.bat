@@ -21,6 +21,7 @@ docker run --gpus all -it --rm ^
   -v "%PROJECT_ROOT%\Schematics:/app/Schematics" ^
   -v "%PROJECT_ROOT%\plots:/app/plots" ^
   -v "%PROJECT_ROOT%\cnn_models:/app/cnn_models" ^
+  -v "%PROJECT_ROOT%\functions:/app/functions" ^
   -w /app ^
   %IMAGE% bash
 

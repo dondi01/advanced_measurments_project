@@ -9,6 +9,10 @@ from keras.applications import ResNet50
 from keras.utils import plot_model
 import shutil
 import paths
+import sys
+sys.path.append('./functions')
+import ml_functions as mlfn
+
 project_root = Path(__file__).resolve().parent
 train_model_flag = False
 INPUT_SIZE = (512, 512, 3)
@@ -16,7 +20,7 @@ seed = 42
 tf.keras.utils.set_random_seed(seed)
 batch_size = 32
 data_directory = str(project_root / 'ml_datasets' /'carton_windowed')
-
+unwindowed_data_directory = str(project_root / 'ml_datasets' /'carton_baseline')
 
 
 def train_model(INPUT_SIZE, training_dataset, validation_dataset):
@@ -68,25 +72,27 @@ print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 
 # loading datasetsn for training and validation
-training_dataset = tf.keras.utils.image_dataset_from_directory(
-    data_directory,
-    validation_split=0.2,
-    shuffle=True,
-    subset="training",
-    seed=seed,
-    image_size=INPUT_SIZE[:2],
-    batch_size = batch_size
-)
+# training_dataset = tf.keras.utils.image_dataset_from_directory(
+#     data_directory,
+#     validation_split=0.2,
+#     shuffle=True,
+#     subset="training",
+#     seed=seed,
+#     image_size=INPUT_SIZE[:2],
+#     batch_size = batch_size
+# )
 
-validation_dataset = tf.keras.utils.image_dataset_from_directory(
-    data_directory,
-    validation_split=0.2,
-    shuffle=True,
-    subset="validation",
-    seed=seed,
-    image_size=INPUT_SIZE[:2],
-    batch_size = batch_size
-)
+# validation_dataset = tf.keras.utils.image_dataset_from_directory(
+#     data_directory,
+#     validation_split=0.2,
+#     shuffle=True,
+#     subset="validation",
+#     seed=seed,
+#     image_size=INPUT_SIZE[:2],
+#     batch_size = batch_size
+# )
+
+training_dataset, validation_dataset = mlfn.get_training_validation_datasets(data_directory, batch_size, INPUT_SIZE)
 
 if train_model_flag:
     model, history = train_model(INPUT_SIZE, training_dataset, validation_dataset)
@@ -130,13 +136,23 @@ else:
 # Get true labels and predictions for the validation set
 y_true = []
 y_pred = []
+original_dimensions = mlfn.get_original_dimensions(unwindowed_data_directory)
+
+
+
 validation_dataset = validation_dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
 
-for images, labels in validation_dataset:
+for images, labels, metadata in validation_dataset:
+
     preds = model.predict(images)
     preds = (preds > 0.5).astype(int).flatten()  # Binary threshold
+    #preparing data for confusion matrix
     y_pred.extend(preds)
     y_true.extend(labels.numpy().astype(int).flatten())
+
+    #preparing for mask reassembly
+    i, x, y = metadata
+
 
 
 
@@ -147,3 +163,5 @@ disp = ConfusionMatrixDisplay(confusion_matrix=cm)
 disp.plot()
 plt.savefig(str(project_root / 'plots' /'confusion_matrix.png'))
 plt.close()
+
+
