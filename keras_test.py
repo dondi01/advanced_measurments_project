@@ -1,6 +1,7 @@
 import cv2
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import accuracy_score, precision_score, f1_score
 import numpy as np
 import time
 from pathlib import Path
@@ -12,17 +13,30 @@ import paths
 import sys
 sys.path.append('./functions')
 import ml_functions as mlfn
-
 project_root = Path(__file__).resolve().parent
-train_model_flag = False
+
+# SETTIINGS
+
+train_model_flag = True
+num_of_epochs = 25
 INPUT_SIZE = (512, 512, 3)
+stride = 250
+border_type = 'reflect'
 seed = 42
-tf.keras.utils.set_random_seed(seed)
 batch_size = 32
+dense_layer_dropout = 0.2
 data_directory = str(project_root / 'ml_datasets' /'carton_windowed')
 unwindowed_data_directory = str(project_root / 'ml_datasets' /'carton_baseline')
 output_directory = str(project_root / 'ml_datasets' / 'output') #for overlays
+faulty_source_path = str( project_root / 'ml_datasets' / 'carton_baseline' / 'faulty')
+healthy_source_path = str( project_root / 'ml_datasets' / 'carton_baseline' / 'healthy')
+faulty_output_path = str( project_root / 'ml_datasets' / 'carton_windowed' / 'faulty')
+healthy_output_path = str( project_root / 'ml_datasets' / 'carton_windowed' / 'healthy')
+blacklist_path = str(project_root / 'ml_datasets' / 'blacklists' / 'carton_windowed_s250_512_512')
 
+
+
+tf.keras.utils.set_random_seed(seed)
 
 def train_model(INPUT_SIZE, training_dataset, validation_dataset):
     """Function to train the model, can be used in the future for training"""
@@ -50,7 +64,7 @@ def train_model(INPUT_SIZE, training_dataset, validation_dataset):
     x = data_augmentation(inputs) # only actctive during training
     x = base_model(x, training=False)  # Pass the input through the base model
     x = tf.keras.layers.GlobalAveragePooling2D()(x)  # Add a global average pooling layer
-    x = tf.keras.layers.Dropout(0.2)(x)  # Add a dropout layer for regularization
+    x = tf.keras.layers.Dropout(dense_layer_dropout)(x)  # Add a dropout layer for regularization
     x = tf.keras.layers.Dense(1, activation='sigmoid', name='output_layer')(x)  # Add a dense layer for binary classification
     model = tf.keras.Model(inputs=inputs, outputs=x, name='resnet50_cardboard')
     #model.summary()
@@ -62,7 +76,7 @@ def train_model(INPUT_SIZE, training_dataset, validation_dataset):
                 metrics = [tf.keras.metrics.BinaryAccuracy()])
 
     ### TRAINING
-    history = model.fit(training_dataset, epochs=1, validation_data=validation_dataset)
+    history = model.fit(training_dataset, epochs=num_of_epochs, validation_data=validation_dataset)
     return model, history
 
 
@@ -72,27 +86,7 @@ print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 
 
-# loading datasetsn for training and validation
-# training_dataset = tf.keras.utils.image_dataset_from_directory(
-#     data_directory,
-#     validation_split=0.2,
-#     shuffle=True,
-#     subset="training",
-#     seed=seed,
-#     image_size=INPUT_SIZE[:2],
-#     batch_size = batch_size
-# )
-
-# validation_dataset = tf.keras.utils.image_dataset_from_directory(
-#     data_directory,
-#     validation_split=0.2,
-#     shuffle=True,
-#     subset="validation",
-#     seed=seed,
-#     image_size=INPUT_SIZE[:2],
-#     batch_size = batch_size
-# )
-
+mlfn.prepare_data(INPUT_SIZE[:2], stride, border_type, faulty_source_path, healthy_source_path, faulty_output_path, healthy_output_path, blacklist_path)
 training_dataset, validation_dataset = mlfn.get_training_validation_datasets(data_directory, batch_size, INPUT_SIZE)
 
 if train_model_flag:
@@ -178,6 +172,7 @@ for pred, (i, x, y) in zip(y_pred, log_metadata):
 #first we empty the output directory
 mlfn.empty_directory(output_directory)
 # Iterate over the dictionary items to ensure correct alignment
+initial_dataset_confusion_matrix = {}
 for i in masks:
     mask = masks[i]
     original_image_path = paths[i]
@@ -186,13 +181,44 @@ for i in masks:
     mlfn.overlay_and_save(original_image_path, mask, output_path)
     print(f"Mask for image {i} saved to {output_path}")
 
+    #gather data if the initial image was faulty or not (before windowing, which might create images with no faults, even if classified as faulty)
+    if np.all(mask == 0):
+        y_pred_i = 0
+    else:
+        y_pred_i = 1
+    
+    true_classification = mlfn.retrieve_classification_from_path(original_image_path)
 
-# Compute confusion matrix
+    if true_classification == 'h':
+        y_i = 0
+    else:
+        y_i = 1
+
+    initial_dataset_confusion_matrix[i] = {
+        'y_i' : y_i,
+        'y_pred_i' : y_pred_i
+    }
+
+# Compute confusion matrix (windowed)
 plt.figure(figsize=(8, 8))
 cm = confusion_matrix(y_true, y_pred)
 disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-disp.plot()
-plt.savefig(str(project_root / 'plots' /'confusion_matrix.png'))
+disp.plot(cmap=plt.cm.Blues, normalize='true')
+plt.savefig(str(project_root / 'plots' /'confusion_matrix_windowed.png'))
 plt.close()
 
 
+y_i_list = [v['y_i'] for v in initial_dataset_confusion_matrix.values()]
+y_pred_i_list = [v['y_pred_i'] for v in initial_dataset_confusion_matrix.values()]
+
+# Compute confusion matrix
+plt.figure(figsize=(8, 8))
+cm = confusion_matrix(y_i_list, y_pred_i_list)
+disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+disp.plot(cmap=plt.cm.Blues, normalize='true')
+plt.savefig(str(project_root / 'plots' / 'confusion_matrix_original_data.png'))
+plt.close()
+
+perf_metrics_windowed = mlfn.compute_ml_metrics(y_true, y_pred)
+perf_metrics_whole_image = mlfn.compute_ml_metrics(y_i_list, y_pred_i_list)
+mlfn.log_training_session(project_root, history, train_model_flag, num_of_epochs, INPUT_SIZE, stride, border_type, seed, batch_size, dense_layer_dropout, data_directory, unwindowed_data_directory, perf_metrics_windowed, perf_metrics_whole_image)

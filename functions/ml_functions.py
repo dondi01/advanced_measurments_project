@@ -3,9 +3,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import tensorflow as tf
+from sklearn.metrics import accuracy_score, precision_score, f1_score, recall_score
 import re
 import os
 from pathlib import Path
+import datetime
 
 image_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.gif']
 
@@ -43,7 +45,7 @@ def sliding_window(image, window_size, stride):
             window = image[y:y+window_h, x:x+window_w]
             yield (x, y, window)
 
-def pad_image_for_sliding_window(image, window_size, stride):
+def pad_image_for_sliding_window(image, window_size, stride, border_type):
     H, W = image.shape[:2]
     window_h, window_w = window_size
 
@@ -52,13 +54,36 @@ def pad_image_for_sliding_window(image, window_size, stride):
     pad_w = (-(W - window_w) % stride) if W > window_w else window_w - W
 
     # Pad bottom and right sides
-    padded_image = cv2.copyMakeBorder(
+
+    if border_type == 'constant':
+        padded_image = cv2.copyMakeBorder(
         image,
         top=0, bottom=pad_h,
         left=0, right=pad_w,
         borderType=cv2.BORDER_CONSTANT,
         value = 0
     )
+    elif border_type == 'replicate':
+            padded_image = cv2.copyMakeBorder(
+        image,
+        top=0, bottom=pad_h,
+        left=0, right=pad_w,
+        borderType=cv2.BORDER_REPLICATE,
+        value = 0
+    )
+    elif border_type == 'reflect':
+            padded_image = cv2.copyMakeBorder(
+        image,
+        top=0, bottom=pad_h,
+        left=0, right=pad_w,
+        borderType=cv2.BORDER_REFLECT,
+        value = 0
+    )
+
+    else:
+        print('WARNING: bordertype is wrong')
+
+
     return padded_image
 
 
@@ -69,21 +94,21 @@ def generate_windows(image_index, image, window_size, stride, output_path):
         final_output_path = str(Path(output_path)/ str(f'window_{image_index}_at_{x}_{y}.png'))
         cv2.imwrite(final_output_path, cropped_image)
 
-def preprocess_image(image, window_size, stride): #used for training with "carton dataset"
+def preprocess_image(image, window_size, stride, border_type): #used for training with "carton dataset"
     dim = (1550, 1550)
     image = center_crop(image, dim) # Removes vignette from dataset and useless pans
     image = scale_image(image, 0.5)  # Scale down to half size for less computational requirements
-    image = pad_image_for_sliding_window(image, window_size, stride)  # Pad the image for sliding window
+    image = pad_image_for_sliding_window(image, window_size, stride, border_type)  # Pad the image for sliding window
     return image
 
 
 
 # Show all windows on the image
-def generate_windowed_dataset(input_path, window_size, stride, output_path):
+def generate_windowed_dataset(input_path, window_size, stride, border_type, output_path):
     for image in Path(input_path).iterdir():
         image_index = parse_input_filename(image)  # Extract the index from the filename
         image = cv2.imread(str(image))
-        image = preprocess_image(image, window_size, stride)
+        image = preprocess_image(image, window_size, stride, border_type)
         generate_windows(image_index, image, window_size, stride, output_path)
 
 
@@ -124,7 +149,7 @@ def parse_windowed_filename_py(file_path):
         return [0, 0, 0]
 
 
-def parse_input_filename(file_path):
+def parse_input_filename(file_path): #extracts univocal code to identify the image
     filename = os.path.basename(file_path)
     pattern = r'^[hf]_c(\d+)\.[a-z]+$'
     match = re.match(pattern, filename)
@@ -137,7 +162,16 @@ def parse_input_filename(file_path):
 #def parse_filename(file_path):
 #    return tf.py_function(parse_filename_py, [file_path], [tf.int32, tf.int32, tf.int32])
 
-
+def retrieve_classification_from_path(file_path):
+    filename = os.path.basename(file_path)
+    pattern = r'^(h|f)_c\d+\.[a-z]+$'  # Simplified pattern to capture only 'h' or 'f'
+    match = re.match(pattern, filename)
+    if match:
+        # Return 'h' or 'f' based on the first character
+        return match.group(1)
+    else:
+        print(f"WARNING: Filename {filename} does not match the expected pattern.")
+        return None
 
 def process_path_py(file_path, image_size):
     width, height = tuple(image_size[:2].numpy()) # we need to do this because image_size is a tensor
@@ -227,3 +261,95 @@ def transform_coordinates(x, y, original_width, original_height, INPUT_SIZE, sca
     x_t = int((original_width / 2) - (INPUT_SIZE[0] / 2) + (x / scale_factor))
     y_t = int((original_height / 2) - (INPUT_SIZE[1] / 2) + (y / scale_factor))
     return x_t, y_t
+
+
+
+def prepare_data(image_index, window_size, stride, border_type, faulty_source_path, healthy_source_path, faulty_output_path, healthy_output_path, blacklist_path): #creates the dataset with the selected window_size and stride
+    # rename files in the output directories to ensure consistency (a continous index is employed for non ambiguous naming)
+    image_index = rename_files_in_dataset(faulty_source_path, 'faulty', image_index)
+    image_index = rename_files_in_dataset(healthy_source_path, 'healthy', image_index)
+
+
+    # Generate windowed datasets for both faulty and healthy images
+    generate_windowed_dataset(faulty_source_path, window_size, stride, border_type, faulty_output_path)
+    generate_windowed_dataset(healthy_source_path, window_size, stride, border_type, healthy_output_path)
+
+    #remove known healthy windows from the faulty directory
+    remove_blacklisted_images(blacklist_path, faulty_output_path)
+    return image_index
+
+def remove_blacklisted_images(blacklist_path, faulty_output_path):
+    """Deletes all files in the specified directory that match the blacklist."""
+    for blacklist_item in Path(blacklist_path).iterdir():
+        for file_path in Path(faulty_output_path).iterdir():
+            if file_path.is_file() and os.path.basename(file_path) == os.path.basename(blacklist_item): #here we verify that the name of the file in the blacklist matches the one of the output path
+                file_path.unlink()  # Delete the file
+                break #early stop to not waist iterations
+    print(f"All files matching blacklist {blacklist_path} in {faulty_output_path} have been deleted.")
+    
+
+def log_training_session(project_root, history, train_model_flag, num_of_epochs, INPUT_SIZE, stride, border_type, seed, batch_size, dense_layer_dropout, data_directory, unwindowed_data_directory, windowed_performance_metrics, whole_image_performance_metrics):
+    if train_model_flag:
+        # Define the plot folder path
+        plot_folder = Path(project_root) / 'plots'
+        #plot_folder.mkdir(exist_ok=True)  # Create the folder if it doesn't exist
+
+        # Define the log file path
+        log_file = plot_folder / 'training_log.txt'
+
+        # Get current date and time
+        now = datetime.datetime.now()
+        date_time_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Extract final training and validation metrics
+        final_train_accuracy = history.history['binary_accuracy'][-1]
+        final_val_accuracy = history.history['val_binary_accuracy'][-1]
+        final_train_loss = history.history['loss'][-1]
+        final_val_loss = history.history['val_loss'][-1]
+
+        # Define settings parameters
+        settings = {
+            "num_of_epochs": num_of_epochs,
+            "INPUT_SIZE": INPUT_SIZE,
+            "stride": stride,
+            "border_type": border_type,
+            "seed": seed,
+            "batch_size": batch_size,
+            "dense_layer_dropout": dense_layer_dropout,
+            "data_directory": data_directory,
+            "unwindowed_data_directory": unwindowed_data_directory
+        }
+
+        # Log the training session details
+        with open(log_file, 'a') as f:
+            f.write(f"Training Session Log - {date_time_str}\n")
+            f.write("Settings:\n")
+            for key, value in settings.items():
+                f.write(f"{key}: {value}\n")
+            f.write("\nResults:\n")
+            f.write(f"Final Training Accuracy: {final_train_accuracy}\n")
+            f.write(f"Final Validation Accuracy: {final_val_accuracy}\n")
+            f.write(f"Final Training Loss: {final_train_loss}\n")
+            f.write(f"Final Validation Loss: {final_val_loss}\n")
+            f.write("\n" + "-"*50 + "\n\n")
+            for key, value in windowed_performance_metrics.items(): #logging and printing performance metrics
+                f.write(f"windowed_{key}: {value}\n")
+                print(f"windowed_{key}: {value}")
+            for key, value in whole_image_performance_metrics.items():
+                f.write(f"whole_image_{key}: {value}\n")
+                print(f"whole_image_{key}: {value}")
+
+
+def compute_ml_metrics(y_true, y_pred):
+    accuracy = accuracy_score(y_true, y_pred)
+    precision = precision_score(y_true, y_pred)
+    recall = recall_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred)
+
+    metrics = {
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1
+    }
+    return metrics
