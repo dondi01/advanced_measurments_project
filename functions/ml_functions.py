@@ -37,13 +37,59 @@ def scale_image(img, factor=1):
 	return cv2.resize(img,(int(img.shape[1]*factor), int(img.shape[0]*factor)))
 
 
+# def sliding_window(image, window_size, stride):
+#     H, W = image.shape[:2]
+#     window_h, window_w = window_size
+
+#     # Calculate the last possible start positions
+#     y_starts = list(range(0, H - window_h + 1, stride))
+#     x_starts = list(range(0, W - window_w + 1, stride))
+
+#     # Ensure the last window covers the bottom/right edge
+#     if y_starts[-1] != H - window_h:
+#         y_starts.append(H - window_h)
+#     if x_starts[-1] != W - window_w:
+#         x_starts.append(W - window_w)
+
+#     for y in y_starts:
+#         for x in x_starts:
+#             window = image[y:y+window_h, x:x+window_w]
+#             yield (x, y, window)
+
+
 def sliding_window(image, window_size, stride):
     H, W = image.shape[:2]
     window_h, window_w = window_size
-    for y in range(0, H - window_h + 1, stride):
-        for x in range(0, W - window_w + 1, stride):
+    x, y = 0, 0
+    def iterate_coord(w_l, max_w, stride):
+        x_list = []
+        x = 0
+        while x < max_w - w_l + 1:
+            if x + stride + w_l > max_w:
+                x = max_w - w_l
+                x_list.append(x)
+                return x_list
+            else:
+                x_list.append(x)
+                x += stride
+            
+    y_list = iterate_coord(window_h, H, stride)
+    x_list = iterate_coord(window_w, W, stride)
+    for y in y_list:
+        for x in x_list:
             window = image[y:y+window_h, x:x+window_w]
             yield (x, y, window)
+    # while y < H  - window_h + 1:
+    #     if y + stride + window_h > H:
+    #         y = H - window_h
+    #     else:
+    #         y += stride
+    #     while x < W - window_w + 1:
+    #         if x + stride + window_w > W:
+    #             x = W - window_w
+    #         else:
+    #             x += stride
+
 
 def pad_image_for_sliding_window(image, window_size, stride, border_type):
     H, W = image.shape[:2]
@@ -55,29 +101,33 @@ def pad_image_for_sliding_window(image, window_size, stride, border_type):
 
     # Pad bottom and right sides
 
+
+    pad_h_top = int(pad_h / 2) #centering padding
+    pad_w_left = int(pad_w / 2)
+    pad_h_bottom = pad_h - pad_h_top
+    pad_w_right = pad_w - pad_w_left
+
     if border_type == 'constant':
         padded_image = cv2.copyMakeBorder(
         image,
-        top=0, bottom=pad_h,
-        left=0, right=pad_w,
+        top=pad_h_top, bottom=pad_h_bottom,
+        left=pad_w_left, right=pad_w_right,
         borderType=cv2.BORDER_CONSTANT,
         value = 0
     )
     elif border_type == 'replicate':
             padded_image = cv2.copyMakeBorder(
         image,
-        top=0, bottom=pad_h,
-        left=0, right=pad_w,
+        top=pad_h_top, bottom=pad_h_bottom,
+        left=pad_w_left, right=pad_w_right,
         borderType=cv2.BORDER_REPLICATE,
-        value = 0
     )
     elif border_type == 'reflect':
-            padded_image = cv2.copyMakeBorder(
+        padded_image = cv2.copyMakeBorder(
         image,
-        top=0, bottom=pad_h,
-        left=0, right=pad_w,
+        top=pad_h_top, bottom=pad_h_bottom,
+        left=pad_w_left, right=pad_w_right,
         borderType=cv2.BORDER_REFLECT,
-        value = 0
     )
 
     else:
@@ -90,13 +140,11 @@ def pad_image_for_sliding_window(image, window_size, stride, border_type):
 def generate_windows(image_index, image, window_size, stride, output_path):
     for i, (x, y, window) in enumerate(sliding_window(image, window_size, stride)):
         window_h, window_w = window_size
-        cropped_image = image[x:x + window_w, y:y + window_h] # Slicing to crop the image
         final_output_path = str(Path(output_path)/ str(f'window_{image_index}_at_{x}_{y}.png'))
-        cv2.imwrite(final_output_path, cropped_image)
+        cv2.imwrite(final_output_path, window)
 
-def preprocess_image(image, window_size, stride, border_type): #used for training with "carton dataset"
-    dim = (1550, 1550)
-    image = center_crop(image, dim) # Removes vignette from dataset and useless pans
+def preprocess_image(image, window_size, stride, border_type, cropping_dim = (1550, 1550)): #used for training with "carton dataset"
+    #image = center_crop(image, cropping_dim) # Removes vignette from dataset and useless pans
     image = scale_image(image, 0.5)  # Scale down to half size for less computational requirements
     image = pad_image_for_sliding_window(image, window_size, stride, border_type)  # Pad the image for sliding window
     return image
@@ -391,10 +439,11 @@ def compute_ml_metrics(y_true, y_pred):
     }
     return metrics
 
-def process_input_data(image_index, image, window_size, batch_size, stride, input_path, working_folder_path, output_path): #this function is similar to the ones used to prepare the dataset but it is meant as the input into the algorithm
+def process_input_data(image_index, window_size, batch_size, stride, input_path, working_folder_path): #this function is similar to the ones used to prepare the dataset but it is meant as the input into the algorithm
     classification = 'testing'
     image_index = 0
+    border_type = 'reflect'  # Default border type, can be changed if needed
     rename_files_in_dataset(input_path, classification, image_index)
-    generate_windows(image_index, image, window_size, stride, working_folder_path)
+    generate_windowed_dataset(input_path, window_size, stride, border_type, working_folder_path)
     test_windows = get_testing_dataset(working_folder_path, batch_size, window_size)
     return test_windows
