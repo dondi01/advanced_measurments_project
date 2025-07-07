@@ -78,6 +78,7 @@ def sliding_window(image, window_size, stride):
     for y in y_list:
         for x in x_list:
             window = image[y:y+window_h, x:x+window_w]
+            print(f"INFO: shape of window: {window.shape}")
             yield (x, y, window)
     # while y < H  - window_h + 1:
     #     if y + stride + window_h > H:
@@ -91,7 +92,7 @@ def sliding_window(image, window_size, stride):
     #             x += stride
 
 
-def pad_image_for_sliding_window(image, window_size, stride, border_type):
+def pad_image_for_sliding_window(image, window_size, stride, border_type, padding_position='bottom_right'):
     H, W = image.shape[:2]
     window_h, window_w = window_size
 
@@ -101,11 +102,17 @@ def pad_image_for_sliding_window(image, window_size, stride, border_type):
 
     # Pad bottom and right sides
 
-
-    pad_h_top = int(pad_h / 2) #centering padding
-    pad_w_left = int(pad_w / 2)
-    pad_h_bottom = pad_h - pad_h_top
-    pad_w_right = pad_w - pad_w_left
+    if padding_position == 'bottom_right':
+        # Calculate padding for bottom and right sides
+        pad_h_top = 0
+        pad_w_left = 0
+        pad_h_bottom = pad_h
+        pad_w_right = pad_w
+    elif padding_position == 'center':
+        pad_h_top = int(pad_h / 2) #centering padding
+        pad_w_left = int(pad_w / 2)
+        pad_h_bottom = pad_h - pad_h_top
+        pad_w_right = pad_w - pad_w_left
 
     if border_type == 'constant':
         padded_image = cv2.copyMakeBorder(
@@ -148,7 +155,6 @@ def preprocess_image(image, window_size, stride, border_type, cropping_dim = (15
     image = scale_image(image, 0.5)  # Scale down to half size for less computational requirements
     image = pad_image_for_sliding_window(image, window_size, stride, border_type)  # Pad the image for sliding window
     return image
-
 
 
 # Show all windows on the image
@@ -201,7 +207,7 @@ def parse_windowed_filename_py(file_path):
 
 def parse_input_filename(file_path): #extracts univocal code to identify the image
     filename = os.path.basename(file_path)
-    pattern = r'^[hf]_c(\d+)\.[a-z]+$'
+    pattern = r'^[htf]_c(\d+)\.[a-z]+$'
     match = re.match(pattern, filename)
     if match:
         return int(match.group(1))
@@ -274,7 +280,11 @@ def get_training_validation_datasets(input_path, batch_size, image_size):
 def get_testing_dataset(input_path, batch_size, image_size):
     list_ds = tf.data.Dataset.list_files(str(Path(input_path) / '*.png'), shuffle=False)
     extracted_ds = list_ds.map(lambda file_path: process_path(file_path, image_size))
-    return extracted_ds
+    batched_ds = extracted_ds.batch(batch_size)
+    # Debug: print shapes of first few images
+    for img, label, meta in batched_ds.take(5):
+        print("DEBUG: Image shape in dataset:", img.shape)
+    return batched_ds
 
 
 def find_image_path_and_shape(parent_folder_path, i):
@@ -354,10 +364,6 @@ def prepare_data(image_index, window_size, stride, border_type, faulty_source_pa
         remove_blacklisted_images(blacklist_path, faulty_output_path)    
     return image_index
 
-    
-
-    
-    return image_index
 
 def remove_blacklisted_images(blacklist_path, faulty_output_path):
     """Deletes all files in the specified directory that match the blacklist."""
@@ -447,3 +453,52 @@ def process_input_data(image_index, window_size, batch_size, stride, input_path,
     generate_windowed_dataset(input_path, window_size, stride, border_type, working_folder_path)
     test_windows = get_testing_dataset(working_folder_path, batch_size, window_size)
     return test_windows
+
+def classify_dataset(dataset, model, scale_factor, window_size, unwindowed_data_directory, output_path):
+    # Get true labels and predictions for the validation set
+    y_pred = []
+    log_metadata = []
+    masks = {}
+    paths = {}
+    
+    #dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
+
+    for images, labels, tensor_metadata in dataset:
+
+        preds = model.predict(images)
+        preds = (preds > 0.5).astype(int).flatten()  # Binary threshold
+        #preparing data for confusion matrix
+        y_pred.extend(preds)
+
+        # Collect metadata for each prediction
+        tensor_i, tensor_x, tensor_y = tensor_metadata
+        list_i = tensor_i.numpy().tolist()
+        list_x = tensor_x.numpy().tolist()
+        list_y = tensor_y.numpy().tolist()
+
+        log_metadata.extend(list(zip(list_i, list_x, list_y)))
+
+    for pred, (i, x, y) in zip(y_pred, log_metadata):
+        # Reconstruct the original image dimensions
+        original_path, original_width, original_height = find_image_path_and_shape(unwindowed_data_directory, i)
+        if i not in masks:
+            masks[i] = np.zeros((original_height, original_width), dtype=np.uint8)
+            paths[i] = original_path
+        if pred == 1:
+            # Mark the area as faulty in the mask
+            x, y = transform_coordinates(x, y, original_width, original_height, window_size, scale_factor)
+            masks[i][y:y+int(window_size[0] / scale_factor), x:x+int(window_size[1] / scale_factor)] = 255
+
+    #construct overlays for each image
+
+    #first we empty the output directory
+    empty_directory(output_path)
+    # Iterate over the dictionary items to ensure correct alignment
+    for i in masks:
+        mask = masks[i]
+        original_image_path = paths[i]
+        # Save the mask as an image
+        overlay_path = str(Path(output_path) / f'overlay_{i}.png')
+        overlay_and_save(original_image_path, mask, overlay_path)
+        print(f"Mask for image {i} saved to {overlay_path}")
+    print("INFO: Overlays saved to output directory.")
