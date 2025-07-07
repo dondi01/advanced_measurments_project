@@ -18,6 +18,7 @@ project_root = Path(__file__).resolve().parent
 # SETTIINGS
 
 train_model_flag = True
+skip_generation = 'skip_all' # 'generate_all', 'only_remove_blacklist', 'skip_all'
 num_of_epochs = 25
 INPUT_SIZE = (512, 512, 3)
 stride = 250
@@ -32,11 +33,15 @@ faulty_source_path = str( project_root / 'ml_datasets' / 'carton_baseline' / 'fa
 healthy_source_path = str( project_root / 'ml_datasets' / 'carton_baseline' / 'healthy')
 faulty_output_path = str( project_root / 'ml_datasets' / 'carton_windowed' / 'faulty')
 healthy_output_path = str( project_root / 'ml_datasets' / 'carton_windowed' / 'healthy')
-blacklist_path = str(project_root / 'ml_datasets' / 'blacklists' / 'carton_windowed_s250_512_512')
+blacklist_path = str(project_root / 'ml_datasets' / 'blacklists' / 'carton_windowed_s250_w512_h512')
 
 
 
 tf.keras.utils.set_random_seed(seed)
+
+def use_model(input_path, output_path, window_size, stride, border_type):
+    mlfn.generate_windowed_dataset(input_path, window_size, stride, border_type, output_path)
+
 
 def train_model(INPUT_SIZE, training_dataset, validation_dataset):
     """Function to train the model, can be used in the future for training"""
@@ -85,13 +90,17 @@ print(shutil.which("dot"))
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 
+image_index = 0
 
-mlfn.prepare_data(INPUT_SIZE[:2], stride, border_type, faulty_source_path, healthy_source_path, faulty_output_path, healthy_output_path, blacklist_path)
+mlfn.prepare_data(image_index, INPUT_SIZE[:2], stride, border_type, faulty_source_path, healthy_source_path, faulty_output_path, healthy_output_path, blacklist_path, skip_generation)
 training_dataset, validation_dataset = mlfn.get_training_validation_datasets(data_directory, batch_size, INPUT_SIZE)
 
 if train_model_flag:
+    print("INFO: starting training")
     model, history = train_model(INPUT_SIZE, training_dataset, validation_dataset)
+    print("INFO: saving model")
     model.save(str(project_root / 'cnn_models' /'test.keras'))
+
 
     acc = history.history['binary_accuracy']
     val_acc = history.history['val_binary_accuracy']
@@ -121,7 +130,7 @@ if train_model_flag:
     #plt.show()
 else:
     model = tf.keras.models.load_model(str(project_root / 'cnn_models' /'test.keras'))
-    print("Model loaded from file.")
+    print("INFO: Model loaded from file.")
     
 
 
@@ -201,9 +210,9 @@ for i in masks:
 
 # Compute confusion matrix (windowed)
 plt.figure(figsize=(8, 8))
-cm = confusion_matrix(y_true, y_pred)
+cm = confusion_matrix(y_true, y_pred, normalize='true')
 disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-disp.plot(cmap=plt.cm.Blues, normalize='true')
+disp.plot(cmap=plt.cm.Blues)
 plt.savefig(str(project_root / 'plots' /'confusion_matrix_windowed.png'))
 plt.close()
 
@@ -213,12 +222,13 @@ y_pred_i_list = [v['y_pred_i'] for v in initial_dataset_confusion_matrix.values(
 
 # Compute confusion matrix
 plt.figure(figsize=(8, 8))
-cm = confusion_matrix(y_i_list, y_pred_i_list)
+cm = confusion_matrix(y_i_list, y_pred_i_list, normalize='true')
 disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-disp.plot(cmap=plt.cm.Blues, normalize='true')
+disp.plot(cmap=plt.cm.Blues)
 plt.savefig(str(project_root / 'plots' / 'confusion_matrix_original_data.png'))
 plt.close()
 
 perf_metrics_windowed = mlfn.compute_ml_metrics(y_true, y_pred)
 perf_metrics_whole_image = mlfn.compute_ml_metrics(y_i_list, y_pred_i_list)
+#train_model_flag = True # override for debug
 mlfn.log_training_session(project_root, history, train_model_flag, num_of_epochs, INPUT_SIZE, stride, border_type, seed, batch_size, dense_layer_dropout, data_directory, unwindowed_data_directory, perf_metrics_windowed, perf_metrics_whole_image)

@@ -121,12 +121,14 @@ def rename_files_in_dataset(directory, classification, i): # useful for linking 
         file_path.rename(new_path)
         j += 1
 
-    if classification not in ['healthy', 'faulty']:
-        raise ValueError("Classification must be either 'healthy' or 'faulty'.")
+    if classification not in ['healthy', 'faulty', 'testing']:
+        raise ValueError("Classification must be either 'healthy', 'faulty' or 'testing'.")
     elif classification == 'healthy':
         classification = 'h'
-    else:
+    elif classification == 'faulty':
         classification = 'f'
+    else:
+        classification = 't' #used for testing or deployment
     for file_path in Path(directory).iterdir():
         if file_path.is_file() and file_path.suffix.lower() in image_extensions:
             new_name = f"{classification}_c{i}{file_path.suffix.lower()}"  # Create new name with class and index
@@ -220,6 +222,13 @@ def get_training_validation_datasets(input_path, batch_size, image_size):
     return training_dataset, validation_dataset
 
 
+
+def get_testing_dataset(input_path, batch_size, image_size):
+    list_ds = tf.data.Dataset.list_files(str(Path(input_path) / '*.png'), shuffle=False)
+    extracted_ds = list_ds.map(lambda file_path: process_path(file_path, image_size))
+    return extracted_ds
+
+
 def find_image_path_and_shape(parent_folder_path, i):
     # Iterate through the subdirectories in the parent folder
     for root, dirs, files in os.walk(parent_folder_path):
@@ -264,28 +273,56 @@ def transform_coordinates(x, y, original_width, original_height, INPUT_SIZE, sca
 
 
 
-def prepare_data(image_index, window_size, stride, border_type, faulty_source_path, healthy_source_path, faulty_output_path, healthy_output_path, blacklist_path): #creates the dataset with the selected window_size and stride
+def prepare_data(image_index, window_size, stride, border_type, faulty_source_path, healthy_source_path, faulty_output_path, healthy_output_path, blacklist_path, skip_generation): #creates the dataset with the selected window_size and stride
     # rename files in the output directories to ensure consistency (a continous index is employed for non ambiguous naming)
     image_index = rename_files_in_dataset(faulty_source_path, 'faulty', image_index)
     image_index = rename_files_in_dataset(healthy_source_path, 'healthy', image_index)
 
 
     # Generate windowed datasets for both faulty and healthy images
-    generate_windowed_dataset(faulty_source_path, window_size, stride, border_type, faulty_output_path)
-    generate_windowed_dataset(healthy_source_path, window_size, stride, border_type, healthy_output_path)
 
-    #remove known healthy windows from the faulty directory
-    remove_blacklisted_images(blacklist_path, faulty_output_path)
+    if skip_generation == 'generate_all':
+        print("INFO: starting generation of windows")
+        generate_windowed_dataset(faulty_source_path, window_size, stride, border_type, faulty_output_path)
+        generate_windowed_dataset(healthy_source_path, window_size, stride, border_type, healthy_output_path)
+        print("INFO: finished generation of windows")
+        print("INFO: starting removal of false positive windows")
+        remove_blacklisted_images(blacklist_path, faulty_output_path)
+
+    elif skip_generation == 'only_remove_blacklist':
+        print("INFO: skipping generation of dataset, only removing blacklisted images")
+        #remove known healthy windows from the faulty directory
+        print("INFO: starting removal of false positive windows")
+        remove_blacklisted_images(blacklist_path, faulty_output_path)
+    elif skip_generation == 'skip_all':
+        print("INFO: skipping generation of dataset and not removing blacklisted images")
+    else:
+        print("WARNING: skip_generation parameter is not recognized, performing generation of dataset and removing blacklisted images")
+        print("INFO: starting generation of windows")
+        generate_windowed_dataset(faulty_source_path, window_size, stride, border_type, faulty_output_path)
+        generate_windowed_dataset(healthy_source_path, window_size, stride, border_type, healthy_output_path)
+        print("INFO: finished generation of windows")
+        print("INFO: starting removal of false positive windows")
+        remove_blacklisted_images(blacklist_path, faulty_output_path)    
+    return image_index
+
+    
+
+    
     return image_index
 
 def remove_blacklisted_images(blacklist_path, faulty_output_path):
     """Deletes all files in the specified directory that match the blacklist."""
     for blacklist_item in Path(blacklist_path).iterdir():
+        was_found = False
         for file_path in Path(faulty_output_path).iterdir():
             if file_path.is_file() and os.path.basename(file_path) == os.path.basename(blacklist_item): #here we verify that the name of the file in the blacklist matches the one of the output path
                 file_path.unlink()  # Delete the file
+                was_found = True
                 break #early stop to not waist iterations
-    print(f"All files matching blacklist {blacklist_path} in {faulty_output_path} have been deleted.")
+        if not was_found:
+            print(f"WARNING: blacklisted image {os.path.basename(blacklist_item)} was not found")
+    print(f"INFO: All files matching blacklist {blacklist_path} in {faulty_output_path} have been deleted.")
     
 
 def log_training_session(project_root, history, train_model_flag, num_of_epochs, INPUT_SIZE, stride, border_type, seed, batch_size, dense_layer_dropout, data_directory, unwindowed_data_directory, windowed_performance_metrics, whole_image_performance_metrics):
@@ -353,3 +390,11 @@ def compute_ml_metrics(y_true, y_pred):
         'f1': f1
     }
     return metrics
+
+def process_input_data(image_index, image, window_size, batch_size, stride, input_path, working_folder_path, output_path): #this function is similar to the ones used to prepare the dataset but it is meant as the input into the algorithm
+    classification = 'testing'
+    image_index = 0
+    rename_files_in_dataset(input_path, classification, image_index)
+    generate_windows(image_index, image, window_size, stride, working_folder_path)
+    test_windows = get_testing_dataset(working_folder_path, batch_size, window_size)
+    return test_windows

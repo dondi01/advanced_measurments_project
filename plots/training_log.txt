@@ -1,0 +1,28 @@
+Training Session Log - 2025-07-06 19:30:25
+Settings:
+num_of_epochs: 25
+INPUT_SIZE: (512, 512, 3)
+stride: 250
+border_type: reflect
+seed: 42
+batch_size: 32
+dense_layer_dropout: 0.2
+data_directory: /app/ml_datasets/carton_windowed
+unwindowed_data_directory: /app/ml_datasets/carton_baseline
+
+Results:
+Final Training Accuracy: 0.8641571402549744
+Final Validation Accuracy: 0.9099836349487305
+Final Training Loss: 75.19194793701172
+Final Validation Loss: 64.12812805175781
+
+--------------------------------------------------
+
+windowed_accuracy: 0.9099836333878887
+windowed_precision: 0.9751552795031055
+windowed_recall: 0.8698060941828255
+windowed_f1: 0.9194729136163983
+whole_image_accuracy: 0.9428571428571428
+whole_image_precision: 0.9629629629629629
+whole_image_recall: 0.9430051813471503
+whole_image_f1: 0.9528795811518325
