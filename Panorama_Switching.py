@@ -16,6 +16,48 @@ project_root = Path(__file__).resolve().parent
 file_name = 'green_lettere_disallineate.png'
 
 
+def crop_to_main_object(img, margin=10, area_thresh=0.99):
+    """
+    Finds the largest contour (excluding the one that covers the whole image),
+    fits a minAreaRect, and crops the image to that rectangle with a margin.
+    Args:
+        img: Input image (BGR or grayscale).
+        margin: Margin (in pixels) to add around the detected rectangle.
+        area_thresh: Fraction of image area above which a contour is considered 'background'.
+    Returns:
+        Cropped image containing the main object with margin.
+    """
+    # Convert to grayscale if needed
+    if len(img.shape) == 3:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img.copy()
+    # Threshold to get binary mask
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # Find contours
+    contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    img_area = img.shape[0] * img.shape[1]
+    # Filter out contours that are too large (likely the border)
+    filtered = [c for c in contours if cv2.contourArea(c) < area_thresh * img_area]
+    if not filtered:
+        print("No valid contours found, returning original image.")
+        return img  # fallback: return original
+    main_contour = max(filtered, key=cv2.contourArea)
+    # Get min area rectangle
+    rect = cv2.minAreaRect(main_contour)
+    box = cv2.boxPoints(rect)
+    box = box.astype(np.int32)
+    # Get bounding rect with margin
+    x, y, w, h = cv2.boundingRect(box)
+    x = max(x - margin, 0)
+    y = max(y - margin, 0)
+    w = min(w + 2 * margin, img.shape[1] - x)
+    h = min(h + 2 * margin, img.shape[0] - y)
+    cropped = img[y:y+h, x:x+w]
+    #cropped=cv2.drawContours(cropped, main_contour, -1, (0, 255, 0), 2)  # Draw rectangle for visualization
+    return cropped
+
+
 
 # Function to convert strings to integers where possible, useful to order files
 def tryint(s):
@@ -38,15 +80,13 @@ def apply_feather(feather, warped, panorama, C) -> np.ndarray:
 def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plots=True, save_path=None):
     #frames = frames[::2]
     frames = [cv2.undistort(f, camera_matrix, dist_coeffs) for f in frames]
-    crop_w, crop_h = 1556, 1052
-    H, W, C = frames[0].shape
-    center_x, center_y = W // 2, H // 2
-    x1 = center_x - crop_w // 2
-    y1 = center_y - crop_h // 2
-    x2 = x1 + crop_w
-    y2 = y1 + crop_h
-    frames = [f[y1:y2, x1:x2] for f in frames]
-    H, W, C = frames[0].shape
+    W, H, C = frames[0].shape
+
+    frames=[crop_to_main_object(f,margin=50) for f in frames]
+    # for f in frames:
+    #     plt.imshow(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+    #     plt.axis('off')
+    #     plt.show()
     transforms = [np.eye(3, dtype=np.float32)]
     gray_prev = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
     kp_prev, des_prev = orb.detectAndCompute(gray_prev, None)
@@ -55,7 +95,7 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
         gray_curr = cv2.cvtColor(img_curr, cv2.COLOR_BGR2GRAY)
         kp_curr, des_curr = orb.detectAndCompute(gray_curr, None)
         if des_prev is None or des_curr is None or len(kp_prev) < 4 or len(kp_curr) < 4:
-            print(f"Skipping frame {i} due to insufficient features.")
+            #print(f"Skipping frame {i} due to insufficient features.")
             transforms.append(transforms[-1].copy())
             kp_prev, des_prev = kp_curr, des_curr
             continue
@@ -66,7 +106,7 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
         dst_pts = np.float32([kp_curr[m.trainIdx].pt for m in good_matches]).reshape(-1,2)
         M, inliers = cv2.estimateAffinePartial2D(dst_pts, src_pts, method=cv2.RANSAC)
         if M is None:
-            print(f"Skipping frame {i} due to failed affine estimation.")
+            #print(f"Skipping frame {i} due to failed affine estimation.")
             transforms.append(transforms[-1].copy())
             kp_prev, des_prev = kp_curr, des_curr
             continue
@@ -114,7 +154,7 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
                 zero_panorama = False
             else:
                 threshold_coefficient = threshold_coefficient + 0.25
-    print(f"Panorama size: {panorama_width}x{panorama_height}, Offset: ({x_min}, {y_min})")
+    #print(f"Panorama size: {panorama_width}x{panorama_height}, Offset: ({x_min}, {y_min})")
     panorama = np.zeros((panorama_height, panorama_width, C), dtype=np.float32)
     weight = np.zeros((panorama_height, panorama_width), dtype=np.float32)
     clahe = cv2.createCLAHE(clipLimit=1.75, tileGridSize=(20, 20))
@@ -129,10 +169,10 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         mask = cv2.warpAffine((gray_img > 20).astype(np.float32), offset_M[:2], (panorama_width, panorama_height))
         small_mask = cv2.resize(mask, (mask.shape[1] // 8, mask.shape[0] // 8), interpolation=cv2.INTER_LINEAR)
-        small_blur = cv2.GaussianBlur(small_mask, (21, 21), 0)
+        small_blur = cv2.GaussianBlur(small_mask, (5, 5), 0)
         feather = cv2.resize(small_blur, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_LINEAR)
         feather = np.clip(feather, 1e-3, 1.0)
-        panorama = apply_feather(feather, warped, panorama, C)
+        #panorama = apply_feather(feather, warped, panorama, C)
         weight += feather
     weight[weight == 0] = 1
     panorama /= weight[..., None]
@@ -152,8 +192,7 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
         mask = np.zeros(res.shape[:2], dtype=np.uint8)
         cv2.drawContours(mask, [main_contour], -1, 255, thickness=cv2.FILLED)
         res[mask == 0] = 0
-    res=cmo.crop_to_main_object(res)
-
+    res=crop_to_main_object(res, margin=10, area_thresh=0.9)
     # --- End mask logic ---
     if save_path is not None:
         cv2.imwrite(save_path, res)
@@ -181,7 +220,6 @@ if __name__ == "__main__":
         glob.glob(filepath),
         key=alphanum_key)
     frames = [cv2.imread(f, cv2.IMREAD_COLOR) for f in image_files]
-    frames = [f for f in frames if f is not None and f.shape == frames[0].shape]
     orb = cv2.ORB_create(200)
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
     orb.detectAndCompute(frames[0], None)

@@ -88,6 +88,6 @@ if __name__ == "__main__":
     scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("nappies_ok", project_root)  # Paths to the base and test images
 
     base_img=cv2.imread(base_shape_path)  # Load the base image for comparison
-    test_img=cv2.imread(recomposed_path)  # Load the test image
+    test_img=cv2.imread(recomposed_path,cv2.IMREAD_GRAYSCALE)  # Load the test image
     res=extract_print(base_img, test_img, show_plots=True)
     cv2.imwrite(base_print_path, res * 255)  # Save the result as a binary mask

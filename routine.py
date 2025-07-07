@@ -17,6 +17,20 @@ import orb_misprint_detection as omd
 
 project_root = Path(__file__).resolve().parent
 
+expected_results = {
+    "parmareggio": (False, False, False),
+    #"parmareggio_bucato": (False, True, False),
+    "parmigiano": (False, False, False),
+    "parmareggio_ok": (False, False, False),
+    "nappies": (False, True, False),
+    #"green_scratched": (True, True, False),
+    "green_buco_in_piu": (True, True, False),
+    "green_buco_in_meno": (True, True, False),
+    "green_lettere_disallineate": (False, False, True),
+    "green_ok": (False, False, False),
+    "nappies_ok": (False, False, False),
+}
+
 #To do all the operations before calling the panorama funciton
 def call_panorama_pipeline(folder_path,show_plots=False):
     #Load calibration data from the .mat file
@@ -45,16 +59,14 @@ def call_panorama_pipeline(folder_path,show_plots=False):
     #print("Execution time of panorama switching is:", time.time() - start)
     return res
 
-@profile
-def run_full_analysis(recomposed, base_shape, base_print, base_image,show_plots=True):
+#@profile
+def run_full_analysis(recomposed, base_shape, base_print, base_image,torecompose_path=None,show_plots=False):
     """
     Run the full analysis pipeline.
     Returns True if a defect (scratch or hole) is detected, False otherwise.
     """
-    # Load images
-    #recomposed = cv2.imread(recomposed_path, cv2.IMREAD_COLOR)
-    #base_shape = cv2.imread(base_shape_path, cv2.IMREAD_GRAYSCALE)
-    #base_print = cv2.imread(base_print_path, cv2.IMREAD_GRAYSCALE)
+    if torecompose_path is not None:
+        recomposed=call_panorama_pipeline(torecompose_path,show_plots=False)
 
     # Compare masks (holes)
     test_mask, _, holes, _ = tcm.compare_and_plot_masks(base_shape, recomposed, show_plots=False)
@@ -82,7 +94,7 @@ def run_full_analysis(recomposed, base_shape, base_print, base_image,show_plots=
     found_scratch = filtered_skeleton.sum() >= 200
 
     # ORB misprint detection
-    filtered_matches, kp_base, kp_test, aligned_base, aligned_test = omd.detect_differences_with_orb(base_image, recomposed, show_plots=False)
+    filtered_matches, kp_base, kp_test, aligned_base, aligned_test = omd.detect_differences_with_orb(base_image, recomposed, show_plots=True)
 
     # Realign for plotting
     _, recomposed_contours, _ = tcm.preprocess(recomposed)
@@ -139,16 +151,19 @@ def run_full_analysis(recomposed, base_shape, base_print, base_image,show_plots=
 if __name__ == "__main__":
     # Example usage
     project_root = Path(__file__).resolve().parent
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_lettere_disallineate", project_root)
+    name="parmareggio"
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files(name, project_root)
     base_shape= cv2.imread(base_shape_path, cv2.IMREAD_GRAYSCALE)
     test = cv2.imread(recomposed_path)
     base_print= cv2.imread(base_print_path,cv2.IMREAD_GRAYSCALE)
-    base_image=cv2.imread(paths.define_files("green_ok",project_root)[3], cv2.IMREAD_COLOR)
+    base_image=cv2.imread(paths.define_files("parmareggio_ok",project_root)[3], cv2.IMREAD_COLOR)
     result = run_full_analysis(
         recomposed=test,
+        torecompose_path=scorre_path,
         base_shape=base_shape,
         base_print=base_print,
-        show_plots=False,
+        show_plots=True,
         base_image=base_image
-    )
-    print(f"Defect detected: {result}")
+    )   
+    isaccurate="WRONG" if result != expected_results[name] else "CORRECT"
+    print(f"{isaccurate}, Defect detected: {result}, Expected: {expected_results[name]}")

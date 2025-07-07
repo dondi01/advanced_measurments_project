@@ -47,9 +47,18 @@ def detect_differences_with_orb(base, test, show_plots=True):
         if aligned_test.shape != aligned_base.shape:
             aligned_test = center_pad(aligned_test, aligned_base.shape[:2])
     
-    # Convert images to grayscale
-    gray_base = cv2.equalizeHist(cv2.cvtColor(aligned_base, cv2.COLOR_BGR2GRAY))
-    gray_test = cv2.equalizeHist(cv2.cvtColor(aligned_test, cv2.COLOR_BGR2GRAY))
+    # Convert images to grayscale if needed
+    if len(aligned_base.shape) == 2 or (len(aligned_base.shape) == 3 and aligned_base.shape[2] == 1):
+        gray_base = aligned_base if len(aligned_base.shape) == 2 else aligned_base[:, :, 0]
+    else:
+        gray_base = cv2.cvtColor(aligned_base, cv2.COLOR_BGR2GRAY)
+    if len(aligned_test.shape) == 2 or (len(aligned_test.shape) == 3 and aligned_test.shape[2] == 1):
+        gray_test = aligned_test if len(aligned_test.shape) == 2 else aligned_test[:, :, 0]
+    else:
+        gray_test = cv2.cvtColor(aligned_test, cv2.COLOR_BGR2GRAY)
+    # Histogram equalization
+    gray_base = cv2.equalizeHist(gray_base)
+    gray_test = cv2.equalizeHist(gray_test)
     patch_size =31
 
     # Initialize ORB detector
@@ -58,6 +67,11 @@ def detect_differences_with_orb(base, test, show_plots=True):
     # Detect keypoints and descriptors
     kp_base, des_base = orb.detectAndCompute(gray_base, None)
     kp_test, des_test = orb.detectAndCompute(gray_test, None)
+
+    # Check for valid descriptors before matching
+    if des_base is None or des_test is None or des_base.shape[1] != des_test.shape[1]:
+        print("No descriptors found or descriptor shape mismatch, skipping matching.")
+        return [], kp_base, kp_test, aligned_base, aligned_test
 
     # Match features using BFMatcher
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)

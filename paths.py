@@ -25,12 +25,12 @@ def define_files(name,project_root):
             base_print_path = str(project_root / 'Schematics' / 'prints' / 'nappies.png')
             recomposed_path = str(project_root / "Reconstructed" / "nappies.png")
         case "green_scratched":
-            scorre_path = " "
+            scorre_path = None
             base_shape_path = str(project_root / 'Schematics' / 'shapes' /"green.png")
             base_print_path = str(project_root / 'Schematics' / 'prints' /"green.png")
             recomposed_path = str(project_root / "dataset_piccoli" / "dezoommata_green_cut.png")
         case "green_buco_in_piu":
-            scorre_path = " str(project_root / 'dataset_piccoli' / 'Scorre_verde' / 'Buco_in_piu' / '*.png')"
+            scorre_path =     str(project_root / 'dataset_piccoli' / 'Scorre_verde' / 'Buco_in_piu' / '*.png')
             base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'green.png')
             base_print_path = str(project_root / 'Schematics' / 'prints' / 'green.png')
             recomposed_path = str(project_root / "Reconstructed" / "green_buco_in_piu.png")
@@ -67,6 +67,12 @@ def define_files(name,project_root):
             base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'nappies.png')
             base_print_path = str(project_root / 'Schematics' / 'prints' / 'nappies.png')
             recomposed_path = str(project_root / "Reconstructed" / "nappies_misprint.png")
+        case "external_ok":
+            scorre_path = None
+            base_shape_path = str(project_root / 'Schematics' / 'shapes' / 'external.png')
+            base_print_path = str(project_root / 'Schematics' / 'prints' / 'external.png')
+            recomposed_path = str(project_root / "Reconstructed" / "external_ok.bmp")
+
         case _:
             raise ValueError(f"Unknown name: {name}. Please provide a valid name.")
     return scorre_path, base_shape_path, base_print_path, recomposed_path

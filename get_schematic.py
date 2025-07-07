@@ -93,10 +93,11 @@ if __name__ == "__main__":
     start = time.time()
 
     # Path to your image
-    _, base_shape_path, _, recomposed_path =paths.define_files("green_ok", project_root)  # Path to the base schematic image
+    _, base_shape_path, _, recomposed_path =paths.define_files("nappies_ok", project_root)  # Path to the base schematic image
 
     recomposed = cv2.imread(recomposed_path, cv2.IMREAD_GRAYSCALE)
-    # Preprocess the image
+    # Preprocess te image
+    #recomposed = cv2.equalizeHist(recomposed)  # Optional: enhance contrast for better thresholding
     base_img, base_contours, base_thresh = tcm.preprocess(recomposed)
     # Align the mask to zero orientation
     aligned_base_thresh, base_rect, base_main_contour = align_image_to_least_rotation(base_thresh, base_contours)
@@ -119,5 +120,5 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.show()
 
-    #cv2.imwrite(base_shape_path, aligned_base_thresh)
+    cv2.imwrite(base_shape_path, aligned_base_thresh)
     print(f"Execution time: {time.time() - start:.2f} seconds")
