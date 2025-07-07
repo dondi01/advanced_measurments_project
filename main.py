@@ -12,7 +12,8 @@ case_names = [
 ]
 
 project_root = Path(__file__).resolve().parent
-
+average_time=1
+iterations = 0
 while True:
     case = random.choice(case_names)
     print(f"Testing case: {case}")

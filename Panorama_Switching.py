@@ -10,9 +10,12 @@ from numba import njit, prange
 from pathlib import Path
 import Treshold_compare_masks as tcm
 import paths
+import crop_main_object as cmo
 
 project_root = Path(__file__).resolve().parent
 file_name = 'green_lettere_disallineate.png'
+
+
 
 # Function to convert strings to integers where possible, useful to order files
 def tryint(s):
@@ -145,11 +148,12 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
     contours, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     if contours:
         # Find the largest contour (main carton)
-        main_contour = tcm.get_main_object_contour(contours, gray.shape,area_thresh=0.7)
-        mask = np.zeros_like(gray)
+        main_contour = tcm.get_main_object_contour(contours, gray.shape,area_thresh=0.9)
+        mask = np.zeros(res.shape[:2], dtype=np.uint8)
         cv2.drawContours(mask, [main_contour], -1, 255, thickness=cv2.FILLED)
-        # Set anything outside the main contour to 0
         res[mask == 0] = 0
+    res=cmo.crop_to_main_object(res)
+
     # --- End mask logic ---
     if save_path is not None:
         cv2.imwrite(save_path, res)
@@ -164,11 +168,12 @@ def run_panorama_pipeline(frames, orb, bf, camera_matrix, dist_coeffs, show_plot
         # plt.xlabel('Pixel Value')
         # plt.ylabel('Frequency')
         # #plt.show()
+    
     return res
 
 # If run as a script, preserve original behavior
 if __name__ == "__main__":
-    filepath, base_shape, _, recomposed_path = paths.define_files("nappies_misprint",project_root)
+    filepath, base_shape, _, recomposed_path = paths.define_files("parmareggio_ok",project_root)
     mat = scipy.io.loadmat(project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
     camera_matrix = mat['K']
     dist_coeffs = mat['dist']
