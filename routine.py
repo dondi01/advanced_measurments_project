@@ -45,7 +45,7 @@ def call_panorama_pipeline(folder_path,show_plots=False):
     #print("Execution time of panorama switching is:", time.time() - start)
     return res
 
-@profile
+#@profile
 def run_full_analysis(recomposed, base_shape, base_print, base_image,show_plots=True):
     """
     Run the full analysis pipeline.
@@ -57,7 +57,7 @@ def run_full_analysis(recomposed, base_shape, base_print, base_image,show_plots=
     #base_print = cv2.imread(base_print_path, cv2.IMREAD_GRAYSCALE)
 
     # Compare masks (holes)
-    test_mask, _, holes, _ = tcm.compare_and_plot_masks(base_shape, recomposed, show_plots=False)
+    test_mask, _, holes, _ = tcm.compare_and_plot_masks(base_shape, recomposed, show_plots=True)
     
     contours, _ = cv2.findContours(holes, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     min_defect_area = 50
@@ -139,7 +139,7 @@ def run_full_analysis(recomposed, base_shape, base_print, base_image,show_plots=
 if __name__ == "__main__":
     # Example usage
     project_root = Path(__file__).resolve().parent
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_lettere_disallineate", project_root)
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmareggio", project_root)
     base_shape= cv2.imread(base_shape_path, cv2.IMREAD_GRAYSCALE)
     test = cv2.imread(recomposed_path)
     base_print= cv2.imread(base_print_path,cv2.IMREAD_GRAYSCALE)
@@ -150,5 +150,6 @@ if __name__ == "__main__":
         base_print=base_print,
         show_plots=False,
         base_image=base_image
+        torecompose_path=scorre_path
     )
     print(f"Defect detected: {result}")
