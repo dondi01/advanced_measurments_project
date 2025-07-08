@@ -245,6 +245,6 @@ def align_image_to_least_rotation(img, contours=None):
     dx = img_center[0] - int(rect_center[0])
     dy = img_center[1] - int(rect_center[1])
     M_trans = np.float32([[1, 0, dx], [0, 1, dy]])
-    aligned_img = cv2.warpAffine(rotated_img, M_trans, (w, h), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_REPLICATE)
+    aligned_img = cv2.warpAffine(rotated_img, M_trans, (w, h), flags=cv2.INTER_NEAREST)
 
     return aligned_img

@@ -232,5 +232,5 @@ if __name__ == "__main__":
     p_s.camera_matrix = camera_matrix
     p_s.dist_coeffs = dist_coeffs
     start = time.time()
-    res = p_s.run_panorama_pipeline(frames,save_path=recomposed_path,show_plots=False)
+    res = p_s.run_panorama_pipeline(frames,save_path=recomposed_path,show_plots=True)
     print("Execution time is:", time.time() - start)

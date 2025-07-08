@@ -31,7 +31,7 @@ def preprocess_for_canny(image):
     # Standard threshold for contour finding
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     # Canny mask as in Prove.py
-    canny = cv2.Canny(blurred,0,50)
+    canny = cv2.Canny(blurred,0,60)
     contours= cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]
     return canny, contours
 
@@ -79,7 +79,7 @@ def extract_print(schematic_img, picture_img, show_plots=True):
 
 if __name__ == "__main__":
 
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_ok", project_root)  # Paths to the base and test images
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmareggio", project_root)  # Paths to the base and test images
 
     base_img=cv2.imread(base_shape_path)  # Load the base image for comparison
     test_img=cv2.imread(recomposed_path)  # Load the test image
