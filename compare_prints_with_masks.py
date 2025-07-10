@@ -2,12 +2,16 @@ import cv2
 import numpy as np
 import extract_print_features as epf
 import Treshold_compare_masks as tcm
-
+import paths
+import matplotlib.pyplot as plt
+from pathlib import Path
+import functions_th as th
 
 #Extract the print from the test image using the test mask,
 #and then compares it with the oen precomputed from the base mask.
 def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
-
+    if test_mask.shape != base_mask.shape:    
+        test_mask=th.match_size(base_mask, test_mask, pad_value=0)
     # Extract the print from the test image using the test mask
     test_print = epf.extract_print(test_mask, test_img, show_plots=False)
     
@@ -32,7 +36,8 @@ def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
             test_print = tcm.center_crop(test_print, target_shape)
             
     # Dilate both masks to allow for tolerance in matching
-    kernel = np.ones((21, 21), np.uint8)
+    #kernel = np.ones((21, 21), np.uint8)
+    kernel= np.ones((31, 31), np.uint8)  # Smaller kernel for less aggressive dilation
     dil_base = cv2.dilate(base_mask, kernel, iterations=1)
     dil_test = cv2.dilate(test_print, kernel, iterations=1)
 
