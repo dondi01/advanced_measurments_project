@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import re
 
 
 def crop_to_main_object(img, margin=0, area_thresh=0.99):
@@ -46,7 +47,7 @@ def crop_to_main_object(img, margin=0, area_thresh=0.99):
 
 def find_bounding_rectangle(img):
     contours=preprocess(img)[0]
-    main_contour=get_main_object_contour(contours, img.shape)
+    main_contour=get_main_object_contour(contours, img.shape,area_thresh=0.99)
     return cv2.minAreaRect(main_contour)
 
 def center_crop(img, target_shape):
@@ -94,8 +95,8 @@ def rescale_and_resize_mask(aligned_mask, mask_rect=None, target_rect=None, targ
     # Rescale and resize a mask so that its main object's rectangle matches the target rectangle's size,
     # then crop or pad to the target shape. Used for robust geometric normalization.
     target_shape = target_img.shape[:2] if target_img is not None else aligned_mask.shape[:2]
-    mask_rect= find_bounding_rectangle(aligned_mask) if mask_rect is None else mask_rect
-    target_rect = find_bounding_rectangle(target_img) if target_rect is None else target_rect
+    mask_rect= find_bounding_rectangle(preprocess(aligned_mask)[1]) if mask_rect is None else mask_rect
+    target_rect = find_bounding_rectangle(preprocess(target_img)[1]) if target_rect is None else target_rect
     if mask_rect is not None and target_rect is not None:
         # Find dimensions of the rectangles (sorted so width <= height)
         target_w, target_h = sorted(target_rect[1])
@@ -248,3 +249,12 @@ def align_image_to_least_rotation(img, contours=None):
     aligned_img = cv2.warpAffine(rotated_img, M_trans, (w, h), flags=cv2.INTER_NEAREST)
 
     return aligned_img
+
+
+def alphanum_key(s):
+    def tryint(s):
+        try:
+            return int(s)
+        except:
+            return s
+    return [tryint(c) for c in re.split('([0-9]+)', s)]

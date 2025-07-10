@@ -2,12 +2,16 @@ import cv2
 import numpy as np
 import extract_print_features as epf
 import Treshold_compare_masks as tcm
-
+import paths
+import matplotlib.pyplot as plt
+from pathlib import Path
+import functions_th as th
 
 #Extract the print from the test image using the test mask,
 #and then compares it with the oen precomputed from the base mask.
 def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
-
+    if test_mask.shape != base_mask.shape:    
+        test_mask=th.match_size(base_mask, test_mask, pad_value=0)
     # Extract the print from the test image using the test mask
     test_print = epf.extract_print(test_mask, test_img, show_plots=False)
     

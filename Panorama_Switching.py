@@ -3,7 +3,6 @@ import numpy as np
 import glob
 import matplotlib.pyplot as plt
 import scipy.io
-import re
 import time
 from pathlib import Path
 import paths
@@ -21,14 +20,6 @@ class reassembler:
         self.save_path = None
         dummy = np.zeros((32, 32), dtype=np.uint8)
         self.orb.detectAndCompute(dummy, None)
-
-    def alphanum_key(self,s):
-        def tryint(s):
-            try:
-                return int(s)
-            except:
-                return s
-        return [tryint(c) for c in re.split('([0-9]+)', s)]
 
     def apply_feather(self,feather, warped, panorama, C) -> np.ndarray:
         for c in range(C):
@@ -139,9 +130,10 @@ class reassembler:
         panorama_cropped = panorama[y:y+h, x:x+w]
         res = cv2.normalize(panorama_cropped, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
         # --- Mask outside main carton contour ---
-        res=self.set_background_to_uniform_color(res, color=(200, 200, 200))
-        res=self.crop_to_main_object(res,margin=50, area_thresh=0.99)
+        res=self.set_background_to_uniform_color(res, color=(255, 255, 255))
         res=th.align_image_to_least_rotation(res)
+        res=self.crop_to_main_object(res,margin=50, area_thresh=0.99)
+        res=cv2.GaussianBlur(res,(3,3),1)
         return res
 
     def set_background_to_uniform_color(self, img, color=(200, 200, 200)):
@@ -172,7 +164,7 @@ class reassembler:
             gray_curr = cv2.cvtColor(img_curr, cv2.COLOR_BGR2GRAY)
             kp_curr, des_curr = self.orb.detectAndCompute(gray_curr, None)
             if des_prev is None or des_curr is None or len(kp_prev) < 4 or len(kp_curr) < 4:
-                print(f"Skipping frame {i} due to insufficient features.")
+                #print(f"Skipping frame {i} due to insufficient features.")
                 transforms.append(transforms[-1].copy())
                 kp_prev, des_prev = kp_curr, des_curr
                 continue
@@ -191,7 +183,14 @@ class reassembler:
             offset_M[0,2] -= x_min
             offset_M[1,2] -= y_min
             img_ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
-            img_ycrcb[:, :, 0] = self.clahe.apply(img_ycrcb[:, :, 0])
+            # --- CLAHE input validation and conversion fix ---
+            y_channel = img_ycrcb[:, :, 0]
+            if y_channel.dtype != np.uint8:
+                y_channel = cv2.normalize(y_channel, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+            if y_channel.ndim == 3:
+                y_channel = cv2.cvtColor(y_channel, cv2.COLOR_BGR2GRAY)
+            img_ycrcb[:, :, 0] = self.clahe.apply(y_channel)
+            # --- END FIX ---
             img = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCrCb2BGR)
             warped = cv2.warpAffine(img, offset_M[:2], (panorama_width, panorama_height))
             gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -199,8 +198,8 @@ class reassembler:
             small_mask = cv2.resize(mask, (mask.shape[1] // 8, mask.shape[0] // 8), interpolation=cv2.INTER_NEAREST)
             small_blur = cv2.GaussianBlur(small_mask, (21, 21), 0)
             feather = cv2.resize(small_blur, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_NEAREST)
-            feather=feather**4
-            feather = np.clip(feather, 1e-3, 1.0)
+            feather=feather
+            feather = np.clip(feather, 1e-6, 1.0)
             panorama = self.apply_feather(feather, warped, panorama, C)
             weight += feather
         
@@ -220,17 +219,17 @@ class reassembler:
 # If run as a script, preserve original behavior
 if __name__ == "__main__":
     p_s=reassembler()
-    filepath, base_shape, _, recomposed_path = paths.define_files("parmareggio_ok",p_s.project_root)
+    filepath, base_shape, _, recomposed_path = paths.define_files("green_ok",p_s.project_root)
     mat = scipy.io.loadmat(p_s.project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
     camera_matrix = mat['K']
     dist_coeffs = mat['dist']
     image_files = sorted(
         glob.glob(filepath),
-        key=p_s.alphanum_key)
+        key=th.alphanum_key)
     frames = [cv2.imread(f, cv2.IMREAD_COLOR) for f in image_files]
     frames = [f for f in frames if f is not None and f.shape == frames[0].shape]
     p_s.camera_matrix = camera_matrix
     p_s.dist_coeffs = dist_coeffs
     start = time.time()
-    res = p_s.run_panorama_pipeline(frames,save_path=recomposed_path,show_plots=True)
+    res = p_s.run_panorama_pipeline(frames,save_path=None,show_plots=True)
     print("Execution time is:", time.time() - start)

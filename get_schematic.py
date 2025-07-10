@@ -31,5 +31,5 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.show()
 
-    #cv2.imwrite(base_shape_path, aligned_base_thresh)
+    cv2.imwrite(base_shape_path, aligned_base_thresh)
     print(f"Execution time: {time.time() - start:.2f} seconds")

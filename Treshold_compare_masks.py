@@ -20,23 +20,18 @@ def compute_overlay(base_mask, test_mask):
 
 
 def compare_and_plot_masks(base_img, test_img, show_plots=False):
-    
     #The base one is already imported as aligned
     aligned_base_thresh=base_img
-    
-    # Preprocess both images, the base just to get the contours
-    base_contours, _ = th.preprocess(base_img)
-    test_contours, aligned_test_thresh = th.preprocess(test_img)
-    test_rect= cv2.minAreaRect(th.get_main_object_contour(test_contours, test_img.shape))  # Ensure we have a rectangle for alignment
-    base_rect=cv2.minAreaRect(th.get_main_object_contour(base_contours, aligned_base_thresh.shape))  # Ensure we have a rectangle for alignment
+
+    _, aligned_test_thresh = th.preprocess(test_img)
 
     # Rescale and resize the test mask to match the base mask's rectangle and shape
-    target_shape = aligned_base_thresh.shape[:2]
-    aligned_test_thresh = th.rescale_and_resize_mask(aligned_test_thresh, test_rect, base_rect, target_shape)
+    aligned_test_thresh = th.rescale_and_resize_mask(aligned_mask=aligned_test_thresh, target_img=aligned_base_thresh)
     
     # Ensure the masks have the same size, or absdiff will fail
     #It is needed sometimes, probably due to rounding
     if aligned_base_thresh.shape != aligned_test_thresh.shape:
+        
         aligned_test_thresh=th.match_size(aligned_base_thresh, aligned_test_thresh,pad_value=255)
 
     # Compute absolute difference between the two masks
@@ -67,7 +62,6 @@ def compare_and_plot_masks(base_img, test_img, show_plots=False):
         plt.tight_layout()
         plt.show()
 
-    if show_plots:
         overlay=compute_overlay(aligned_base_thresh, aligned_test_thresh)
         # Plot the overlay
         plt.figure(figsize=(7, 7))
@@ -76,10 +70,10 @@ def compare_and_plot_masks(base_img, test_img, show_plots=False):
         plt.axis('off')
         plt.show()
 
-    return aligned_test_thresh, aligned_base_thresh, diff_mask, overlay
+    return aligned_test_thresh, aligned_base_thresh, diff_mask
 
 if __name__ == "__main__":
-    scorre_path, base_shape_path, base_print_path, recomposed_path= paths.define_files("green_ok", project_root)  # Paths to the base and test images
+    scorre_path, base_shape_path, base_print_path, recomposed_path= paths.define_files("parmareggio", project_root)  # Paths to the base and test images
 
     base = cv2.imread(base_shape_path,cv2.IMREAD_GRAYSCALE)
     test = cv2.imread(recomposed_path)
