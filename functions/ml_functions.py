@@ -8,6 +8,7 @@ import re
 import os
 from pathlib import Path
 import datetime
+import shutil
 
 image_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.gif']
 
@@ -26,6 +27,29 @@ def center_crop(img, dim):
 	cw2, ch2 = int(crop_width/2), int(crop_height/2) 
 	crop_img = img[mid_y-ch2:mid_y+ch2, mid_x-cw2:mid_x+cw2]
 	return crop_img
+
+def center_crop_folder(input_folder, output_folder, crop_dim):
+    """
+    Applies center_crop to all images in input_folder and saves them to output_folder.
+    Args:
+        input_folder (str or Path): Path to the folder with input images.
+        output_folder (str or Path): Path to the folder to save cropped images.
+        crop_dim (tuple): (width, height) for cropping.
+    """
+    input_folder = Path(input_folder)
+    output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+    for file_path in input_folder.iterdir():
+        if file_path.is_file() and file_path.suffix.lower() in image_extensions:
+            img = cv2.imread(str(file_path))
+            if img is None:
+                print(f"WARNING: Could not read {file_path}")
+                continue
+            cropped = center_crop(img, crop_dim)
+            out_path = output_folder / file_path.name
+            cv2.imwrite(str(out_path), cropped)
+            print(f"Cropped and saved: {out_path}")
 
 def scale_image(img, factor=1):
 	"""Returns resize image by scale factor.
@@ -150,19 +174,20 @@ def generate_windows(image_index, image, window_size, stride, output_path):
         final_output_path = str(Path(output_path)/ str(f'window_{image_index}_at_{x}_{y}.png'))
         cv2.imwrite(final_output_path, window)
 
-def preprocess_image(image, window_size, stride, border_type, cropping_dim = (1550, 1550)): #used for training with "carton dataset"
+def preprocess_image(image, window_size, stride, border_type, scale_img=0.5, cropping_dim = (1550, 1550)): #used for training with "carton dataset"
     #image = center_crop(image, cropping_dim) # Removes vignette from dataset and useless pans
-    image = scale_image(image, 0.5)  # Scale down to half size for less computational requirements
+    image = scale_image(image, scale_img)  # Scale down to half size for less computational requirements
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)  # Convert BGR to RGB for consistency
     image = pad_image_for_sliding_window(image, window_size, stride, border_type)  # Pad the image for sliding window
     return image
 
 
 # Show all windows on the image
-def generate_windowed_dataset(input_path, window_size, stride, border_type, output_path):
+def generate_windowed_dataset(input_path, window_size, stride, border_type, output_path, scale_factor=0.5):
     for image in Path(input_path).iterdir():
         image_index = parse_input_filename(image)  # Extract the index from the filename
         image = cv2.imread(str(image))
-        image = preprocess_image(image, window_size, stride, border_type)
+        image = preprocess_image(image, window_size, stride, border_type, scale_factor)
         generate_windows(image_index, image, window_size, stride, output_path)
 
 
@@ -379,7 +404,7 @@ def remove_blacklisted_images(blacklist_path, faulty_output_path):
     print(f"INFO: All files matching blacklist {blacklist_path} in {faulty_output_path} have been deleted.")
     
 
-def log_training_session(project_root, history, train_model_flag, num_of_epochs, INPUT_SIZE, stride, border_type, seed, batch_size, dense_layer_dropout, data_directory, unwindowed_data_directory, windowed_performance_metrics, whole_image_performance_metrics):
+def log_training_session(project_root, history, train_model_flag, num_of_epochs, INPUT_SIZE, stride, border_type, seed, learning_rate, batch_size, dense_layer_dropout, data_directory, unwindowed_data_directory, windowed_performance_metrics, whole_image_performance_metrics):
     if train_model_flag:
         # Define the plot folder path
         plot_folder = Path(project_root) / 'plots'
@@ -405,6 +430,7 @@ def log_training_session(project_root, history, train_model_flag, num_of_epochs,
             "stride": stride,
             "border_type": border_type,
             "seed": seed,
+            "learning_rate": learning_rate,
             "batch_size": batch_size,
             "dense_layer_dropout": dense_layer_dropout,
             "data_directory": data_directory,
@@ -447,14 +473,16 @@ def compute_ml_metrics(y_true, y_pred):
 
 def process_input_data(image_index, window_size, batch_size, stride, input_path, working_folder_path): #this function is similar to the ones used to prepare the dataset but it is meant as the input into the algorithm
     classification = 'testing'
+    scale_factor=1
     image_index = 0
     border_type = 'reflect'  # Default border type, can be changed if needed
     rename_files_in_dataset(input_path, classification, image_index)
-    generate_windowed_dataset(input_path, window_size, stride, border_type, working_folder_path)
+    generate_windowed_dataset(input_path, window_size, stride, border_type, working_folder_path, scale_factor)  # No scaling for testing
     test_windows = get_testing_dataset(working_folder_path, batch_size, window_size)
     return test_windows
 
 def classify_dataset(dataset, model, scale_factor, window_size, unwindowed_data_directory, output_path):
+
     # Get true labels and predictions for the validation set
     y_pred = []
     log_metadata = []
@@ -486,7 +514,7 @@ def classify_dataset(dataset, model, scale_factor, window_size, unwindowed_data_
             paths[i] = original_path
         if pred == 1:
             # Mark the area as faulty in the mask
-            x, y = transform_coordinates(x, y, original_width, original_height, window_size, scale_factor)
+            #x, y = transform_coordinates(x, y, original_width, original_height, window_size, scale_factor)
             masks[i][y:y+int(window_size[0] / scale_factor), x:x+int(window_size[1] / scale_factor)] = 255
 
     #construct overlays for each image
@@ -502,3 +530,17 @@ def classify_dataset(dataset, model, scale_factor, window_size, unwindowed_data_
         overlay_and_save(original_image_path, mask, overlay_path)
         print(f"Mask for image {i} saved to {overlay_path}")
     print("INFO: Overlays saved to output directory.")
+
+
+def copy_folder_contents(src_folder, dst_folder):
+    """
+    Copies all files from src_folder to dst_folder.
+    Creates dst_folder if it does not exist.
+    """
+    src = Path(src_folder)
+    dst = Path(dst_folder)
+    dst.mkdir(parents=True, exist_ok=True)
+    for file_path in src.iterdir():
+        if file_path.is_file():
+            shutil.copy2(file_path, dst / file_path.name)
+    print(f"Copied all files from {src} to {dst}")

@@ -19,20 +19,22 @@ project_root = Path(__file__).resolve().parent
 
 train_model_flag = True
 skip_generation = 'skip_all' # 'generate_all', 'only_remove_blacklist', 'skip_all'
-num_of_epochs = 25
-INPUT_SIZE = (512, 512, 3)
-stride = 250
+num_of_epochs = 100  # Instead of 30
+INPUT_SIZE = (224, 224, 3)
+stride = 112
 border_type = 'reflect'
 seed = 42
-batch_size = 32
-dense_layer_dropout = 0.2
-data_directory = str(project_root / 'ml_datasets' /'carton_windowed')
-unwindowed_data_directory = str(project_root / 'ml_datasets' /'carton_baseline')
+batch_size = 16  # Instead of 32
+dense_layer_dropout = 0.5
+scale_factor = 1
+learning_rate_value = 0.0005
+data_directory = str(project_root / 'ml_datasets' / 'multiple_datasets' / 'working_folder') #for windowed data
+unwindowed_data_directory = str(project_root / 'ml_datasets' /'multiple_datasets' /'input_folder')
 output_directory = str(project_root / 'ml_datasets' / 'output') #for overlays
-faulty_source_path = str( project_root / 'ml_datasets' / 'carton_baseline' / 'faulty')
-healthy_source_path = str( project_root / 'ml_datasets' / 'carton_baseline' / 'healthy')
-faulty_output_path = str( project_root / 'ml_datasets' / 'carton_windowed' / 'faulty')
-healthy_output_path = str( project_root / 'ml_datasets' / 'carton_windowed' / 'healthy')
+faulty_source_path = str( project_root / 'ml_datasets' / 'multiple_datasets' /'input_folder' / 'faulty')
+healthy_source_path = str( project_root / 'ml_datasets' / 'multiple_datasets' /'input_folder' / 'healthy')
+faulty_output_path = str( project_root / 'ml_datasets' / 'multiple_datasets' /'working_folder' / 'faulty')
+healthy_output_path = str( project_root / 'ml_datasets' / 'multiple_datasets' /'working_folder' / 'healthy')
 blacklist_path = str(project_root / 'ml_datasets' / 'blacklists' / 'carton_windowed_s250_w512_h512')
 
 
@@ -60,28 +62,69 @@ def train_model(INPUT_SIZE, training_dataset, validation_dataset):
 
     #definition a data augmentation layer only active during training
     data_augmentation = tf.keras.Sequential([
-        tf.keras.layers.RandomFlip("horizontal_and_vertical", input_shape=INPUT_SIZE),
-        tf.keras.layers.RandomRotation(0.2),
-        tf.keras.layers.RandomZoom(0.2),
-    ])
+        # Geometric transformations - removed input_shape to fix warning
+        tf.keras.layers.RandomFlip("horizontal_and_vertical"),
+        tf.keras.layers.RandomRotation(0.3, fill_mode='reflect'),  # Increased rotation range
+        tf.keras.layers.RandomZoom(0.15, fill_mode='reflect'),     # Slightly reduced zoom for better detail preservation
+        tf.keras.layers.RandomTranslation(0.1, 0.1, fill_mode='reflect'),  # Small translations
+        
+        # Color and brightness augmentations - important for varying lighting conditions
+        tf.keras.layers.RandomBrightness(0.2, value_range=(0, 255)),
+        tf.keras.layers.RandomContrast(0.2),
+        
+        # Noise and blur - helps with robustness to image quality variations
+        # Note: These might need custom implementation or third-party libraries
+        # tf.keras.layers.GaussianNoise(0.01),  # Uncomment if available
+    ], name='data_augmentation')
 
     inputs = tf.keras.Input(shape=INPUT_SIZE, name='input_layer') #there is a possibility to do sparse and batch shape and size, check if useful
-    x = data_augmentation(inputs) # only actctive during training
+    x = data_augmentation(inputs) # only active during training
     x = base_model(x, training=False)  # Pass the input through the base model
     x = tf.keras.layers.GlobalAveragePooling2D()(x)  # Add a global average pooling layer
-    x = tf.keras.layers.Dropout(dense_layer_dropout)(x)  # Add a dropout layer for regularization
-    x = tf.keras.layers.Dense(1, activation='sigmoid', name='output_layer')(x)  # Add a dense layer for binary classification
+    
+    # Simpler architecture for small dataset - just one dropout and direct classification
+    x = tf.keras.layers.Dropout(dense_layer_dropout)(x)  # Higher dropout for small dataset
+    x = tf.keras.layers.Dense(1, activation='sigmoid', name='output_layer')(x)  # Direct classification
     model = tf.keras.Model(inputs=inputs, outputs=x, name='resnet50_cardboard')
     #model.summary()
 
 
     # definition of optimizer, loss and metrics
-    model.compile(optimizer= tf.keras.optimizers.Adam(),
+    # Use a very low learning rate for small dataset to prevent overfitting
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate_value)  # Even lower learning rate
+    
+    model.compile(optimizer=optimizer,
                 loss = tf.keras.losses.BinaryCrossentropy(from_logits=False),
-                metrics = [tf.keras.metrics.BinaryAccuracy()])
+                metrics = [tf.keras.metrics.BinaryAccuracy(), 
+                          tf.keras.metrics.Precision(), 
+                          tf.keras.metrics.Recall()])
 
     ### TRAINING
-    history = model.fit(training_dataset, epochs=num_of_epochs, validation_data=validation_dataset)
+    # More aggressive early stopping for small dataset
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=10,  # Reduced patience for small dataset
+            restore_best_weights=True,
+            verbose=1
+        ),
+        tf.keras.callbacks.ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.3,  # More aggressive learning rate reduction
+            patience=4,  # Faster response
+            min_lr=1e-8,
+            verbose=1
+        )
+    ]
+    
+    history = model.fit(
+        training_dataset, 
+        epochs=num_of_epochs, 
+        validation_data=validation_dataset,
+        callbacks=callbacks,
+        # Removed class_weight='balanced' temporarily to fix the error
+        # You can manually calculate class weights if needed
+    )
     return model, history
 
 
@@ -134,10 +177,6 @@ else:
     
 
 
-
-
-
-# Get true labels and predictions for the validation set
 y_true = []
 y_pred = []
 #original_metadata = mlfn.get_original_image_metadata(unwindowed_data_directory)
@@ -163,7 +202,7 @@ for images, labels, tensor_metadata in validation_dataset:
 
 masks = {}
 paths = {}
-scale_factor = 0.5
+
 for pred, (i, x, y) in zip(y_pred, log_metadata):
     # Reconstruct the original image dimensions
     original_path, original_width, original_height = mlfn.find_image_path_and_shape(unwindowed_data_directory, i)
@@ -172,9 +211,8 @@ for pred, (i, x, y) in zip(y_pred, log_metadata):
         paths[i] = original_path
     if pred == 1:
         # Mark the area as faulty in the mask
-        x, y = mlfn.transform_coordinates(x, y, original_width, original_height, INPUT_SIZE, scale_factor)
+        #x, y = mlfn.transform_coordinates(x, y, original_width, original_height, INPUT_SIZE, scale_factor)
         masks[i][y:y+int(INPUT_SIZE[0] / scale_factor), x:x+int(INPUT_SIZE[1] / scale_factor)] = 255
-
 
 #construct overlays for each image
 
@@ -195,7 +233,7 @@ for i in masks:
         y_pred_i = 0
     else:
         y_pred_i = 1
-    
+
     true_classification = mlfn.retrieve_classification_from_path(original_image_path)
 
     if true_classification == 'h':
@@ -207,6 +245,8 @@ for i in masks:
         'y_i' : y_i,
         'y_pred_i' : y_pred_i
     }
+
+
 
 # Compute confusion matrix (windowed)
 plt.figure(figsize=(8, 8))
@@ -231,4 +271,4 @@ plt.close()
 perf_metrics_windowed = mlfn.compute_ml_metrics(y_true, y_pred)
 perf_metrics_whole_image = mlfn.compute_ml_metrics(y_i_list, y_pred_i_list)
 #train_model_flag = True # override for debug
-mlfn.log_training_session(project_root, history, train_model_flag, num_of_epochs, INPUT_SIZE, stride, border_type, seed, batch_size, dense_layer_dropout, data_directory, unwindowed_data_directory, perf_metrics_windowed, perf_metrics_whole_image)
+mlfn.log_training_session(project_root, history, train_model_flag, num_of_epochs, INPUT_SIZE, stride, border_type, seed, learning_rate_value, batch_size, dense_layer_dropout, data_directory, unwindowed_data_directory, perf_metrics_windowed, perf_metrics_whole_image)

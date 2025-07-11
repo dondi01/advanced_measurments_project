@@ -26,3 +26,147 @@ whole_image_accuracy: 0.9428571428571428
 whole_image_precision: 0.9629629629629629
 whole_image_recall: 0.9430051813471503
 whole_image_f1: 0.9528795811518325
+Training Session Log - 2025-07-09 10:01:40
+Settings:
+num_of_epochs: 10
+INPUT_SIZE: (224, 224, 3)
+stride: 112
+border_type: reflect
+seed: 42
+batch_size: 32
+dense_layer_dropout: 0.2
+data_directory: /app/ml_datasets/carton_windowed
+unwindowed_data_directory: /app/ml_datasets/carton_baseline
+
+Results:
+Final Training Accuracy: 0.8252863883972168
+Final Validation Accuracy: 0.7806873917579651
+Final Training Loss: 92.84869384765625
+Final Validation Loss: 92.2133560180664
+
+--------------------------------------------------
+
+windowed_accuracy: 0.7921440261865794
+windowed_precision: 0.992
+windowed_recall: 0.6648793565683646
+windowed_f1: 0.7961476725521669
+whole_image_accuracy: 0.8594249201277955
+whole_image_precision: 0.9868421052631579
+whole_image_recall: 0.78125
+whole_image_f1: 0.872093023255814
+Training Session Log - 2025-07-09 12:12:10
+Settings:
+num_of_epochs: 15
+INPUT_SIZE: (224, 224, 3)
+stride: 112
+border_type: reflect
+seed: 42
+learning_rate: 5e-05
+batch_size: 16
+dense_layer_dropout: 0.5
+data_directory: /app/ml_datasets/multiple_datasets/working_folder
+unwindowed_data_directory: /app/ml_datasets/multiple_datasets/input_folder
+
+Results:
+Final Training Accuracy: 0.5889570713043213
+Final Validation Accuracy: 0.6219512224197388
+Final Training Loss: 89.2568130493164
+Final Validation Loss: 79.10365295410156
+
+--------------------------------------------------
+
+windowed_accuracy: 0.5548780487804879
+windowed_precision: 0.6204379562043796
+windowed_recall: 0.8018867924528302
+windowed_f1: 0.6995884773662552
+whole_image_accuracy: 0.5
+whole_image_precision: 0.5
+whole_image_recall: 1.0
+whole_image_f1: 0.6666666666666666
+Training Session Log - 2025-07-09 12:31:54
+Settings:
+num_of_epochs: 15
+INPUT_SIZE: (224, 224, 3)
+stride: 112
+border_type: reflect
+seed: 42
+learning_rate: 5e-05
+batch_size: 16
+dense_layer_dropout: 0.5
+data_directory: /app/ml_datasets/multiple_datasets/working_folder
+unwindowed_data_directory: /app/ml_datasets/multiple_datasets/input_folder
+
+Results:
+Final Training Accuracy: 0.5935583114624023
+Final Validation Accuracy: 0.6829268336296082
+Final Training Loss: 84.27884674072266
+Final Validation Loss: 67.35389709472656
+
+--------------------------------------------------
+
+windowed_accuracy: 0.5853658536585366
+windowed_precision: 0.6528925619834711
+windowed_recall: 0.7523809523809524
+windowed_f1: 0.6991150442477876
+whole_image_accuracy: 0.48
+whole_image_precision: 0.4782608695652174
+whole_image_recall: 0.9166666666666666
+whole_image_f1: 0.6285714285714286
+Training Session Log - 2025-07-09 12:57:17
+Settings:
+num_of_epochs: 100
+INPUT_SIZE: (224, 224, 3)
+stride: 112
+border_type: reflect
+seed: 42
+learning_rate: 5e-05
+batch_size: 16
+dense_layer_dropout: 0.5
+data_directory: /app/ml_datasets/multiple_datasets/working_folder
+unwindowed_data_directory: /app/ml_datasets/multiple_datasets/input_folder
+
+Results:
+Final Training Accuracy: 0.6441717743873596
+Final Validation Accuracy: 0.6402438879013062
+Final Training Loss: 74.3253402709961
+Final Validation Loss: 70.9621353149414
+
+--------------------------------------------------
+
+windowed_accuracy: 0.6280487804878049
+windowed_precision: 0.6833333333333333
+windowed_recall: 0.780952380952381
+windowed_f1: 0.7288888888888889
+whole_image_accuracy: 0.48
+whole_image_precision: 0.4583333333333333
+whole_image_recall: 1.0
+whole_image_f1: 0.6285714285714286
+Training Session Log - 2025-07-09 15:59:48
+Settings:
+num_of_epochs: 100
+INPUT_SIZE: (224, 224, 3)
+stride: 112
+border_type: reflect
+seed: 42
+learning_rate: 5e-05
+batch_size: 16
+dense_layer_dropout: 0.5
+data_directory: /app/ml_datasets/multiple_datasets/working_folder
+unwindowed_data_directory: /app/ml_datasets/multiple_datasets/input_folder
+
+Results:
+Final Training Accuracy: 0.6441717743873596
+Final Validation Accuracy: 0.6402438879013062
+Final Training Loss: 74.3253402709961
+Final Validation Loss: 70.9621353149414
+
+--------------------------------------------------
+
+windowed_accuracy: 0.6280487804878049
+windowed_precision: 0.6833333333333333
+windowed_recall: 0.780952380952381
+windowed_f1: 0.7288888888888889
+whole_image_accuracy: 0.48
+whole_image_precision: 0.4583333333333333
+whole_image_recall: 1.0
+whole_image_f1: 0.6285714285714286

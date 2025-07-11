@@ -16,10 +16,10 @@ import ml_functions as mlfn
 project_root = Path(__file__).resolve().parent
 
 image_index = 0
-window_size = (512, 512)
+window_size = (224, 224)
 batch_size = 32
-stride = 250
-scale_factor = 0.5
+stride = 112
+scale_factor = 1
 
 input_path = str(project_root / 'ml_datasets' / 'deployment' / 'input_folder')
 working_folder_path = str(project_root / 'ml_datasets' / 'deployment' / 'working_folder')
@@ -33,7 +33,7 @@ mlfn.empty_directory(output_path)
 test_dataset = mlfn.process_input_data(image_index, window_size, batch_size, stride, input_path, working_folder_path)
 
 # Load the model
-model = tf.keras.models.load_model(str(project_root / 'cnn_models' /'model06071930.keras'))
+model = tf.keras.models.load_model(str(project_root / 'cnn_models' /'model09071800.keras'))
 
 # Classify the dataset
-mlfn.classify_dataset(test_dataset, model, scale_factor, window_size, input_path, output_path)
+mlfn.classify_dataset(test_dataset, model, scale_factor, (12,12), input_path, output_path)
