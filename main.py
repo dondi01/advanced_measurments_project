@@ -7,6 +7,7 @@ import time
 import concurrent.futures
 import glob
 import functions_th as th
+from concurrent.futures import ProcessPoolExecutor
 # List of all valid case names from paths.py
 case_names = [
      "green_buco_in_piu", "green_buco_in_meno", "green_lettere_disallineate",
@@ -66,20 +67,29 @@ def run_case(case):
 def main():
     global average_time, iterations
     max_cases = len(case_names)
-    n_repeats = 2  # Number of times to process all cases
+    n_repeats = 50  # Number of times to process all cases
     all_times = []
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    start = time.time()
+    # Use processes for CPU-intensive image processing
+    with ProcessPoolExecutor(max_workers=6) as executor:
         for repeat in range(n_repeats):
-            futures = [executor.submit(run_case, case) for case in case_names]
+            futures = {executor.submit(run_case, case): case for case in case_names}
             for future in concurrent.futures.as_completed(futures):
-                case, result, elapsed = future.result()
-                if case != "green_lettere_disallineate":
-                    all_times.append(elapsed)
-                    average_time = sum(all_times) / len(all_times)
-                    iterations += 1
-                print(f"Defect detected: {result}")
-                print(f"Case: {case}, Time: {elapsed:.2f}s, Avg Time: {average_time:.2f}s")
+                case = futures[future]
+                try:
+                    case_name, result, elapsed = future.result()  # Unpack all 3 values
+                    if case != "green_lettere_disallineate":
+                        all_times.append(elapsed)
+                        average_time = sum(all_times) / len(all_times)
+                        iterations += 1
+                    print(f"Defect detected: {result}")
+                    print(f"Case: {case_name}, Time: {elapsed:.2f}s, Avg Time: {average_time:.2f}s")
+                except Exception as e:
+                    print(f"Error processing case {case}: {e}")
+    
+    delta = time.time() - start
     print(f"\nAverage execution time over {iterations} cases: {average_time:.2f} seconds.")
+    print(f"Total execution time: {delta:.2f} seconds.")
 
 if __name__ == "__main__":
     main()
