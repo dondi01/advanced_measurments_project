@@ -20,10 +20,14 @@ class reassembler:
         self.save_path = None
         dummy = np.zeros((32, 32), dtype=np.uint8)
         self.orb.detectAndCompute(dummy, None)
+        mat = scipy.io.loadmat(self.project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
+        camera_matrix = mat['K']
+        dist_coeffs = mat['dist']
+        self.camera_matrix = camera_matrix
+        self.dist_coeffs = dist_coeffs
 
-    def apply_feather(self,feather, warped, panorama, C) -> np.ndarray:
-        for c in range(C):
-            panorama[..., c] += warped[..., c] * feather
+    def apply_feather(self, feather, warped, panorama, C) -> np.ndarray:
+        panorama += warped * feather[..., None]
         return panorama
 
     def crop_to_main_object(self,img, margin=0, area_thresh=0.99):
@@ -132,8 +136,9 @@ class reassembler:
         # --- Mask outside main carton contour ---
         res=self.set_background_to_uniform_color(res, color=(255, 255, 255))
         res=th.align_image_to_least_rotation(res)
+        
         res=self.crop_to_main_object(res,margin=50, area_thresh=0.99)
-        res=cv2.GaussianBlur(res,(3,3),1)
+        #res=cv2.GaussianBlur(res,(3,3),1)
         return res
 
     def set_background_to_uniform_color(self, img, color=(200, 200, 200)):
@@ -150,59 +155,66 @@ class reassembler:
     
     # Main panorama pipeline, takes frames, orb, bf, camera_matrix, dist_coeffs as input
     def run_panorama_pipeline(self,frames,show_plots=True, save_path=None):
-        frames = frames[::2]
-        frames = [cv2.undistort(f, self.camera_matrix, self.dist_coeffs) for f in frames]
-        frames = [self.crop_to_main_object(f, margin=100, area_thresh=0.99) for f in frames]
-        H, W, C = frames[0].shape
-       
-        transforms = [np.eye(3, dtype=np.float32)]
-        gray_prev = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
-        kp_prev, des_prev = self.orb.detectAndCompute(gray_prev, None)
+        if len(frames) > 1:
+            #N = 10000  # Replace with the desired number of samples
+            #step = max(1, len(frames) // N)  # Calculate step size
+            #frames = frames[::step][:N]  # Take every `step` frame and limit to `N` samples
+            #frames = frames[::2]
+            frames = [cv2.undistort(f, self.camera_matrix, self.dist_coeffs) for f in frames]
+            frames = [self.crop_to_main_object(f, margin=100, area_thresh=0.99) for f in frames]
+            H, W, C = frames[0].shape
+            for img in frames:
+                img_ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+                # --- CLAHE input validation and conversion fix ---
+                y_channel = img_ycrcb[:, :, 0]
+                if y_channel.dtype != np.uint8:
+                    y_channel = cv2.normalize(y_channel, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+                if y_channel.ndim == 3:
+                    y_channel = cv2.cvtColor(y_channel, cv2.COLOR_BGR2GRAY)
+                img_ycrcb[:, :, 0] = self.clahe.apply(y_channel)
+                # --- END FIX ---
+                img = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCrCb2BGR)
         
-        for i in range(1, len(frames)):
-            img_curr = frames[i]
-            gray_curr = cv2.cvtColor(img_curr, cv2.COLOR_BGR2GRAY)
-            kp_curr, des_curr = self.orb.detectAndCompute(gray_curr, None)
-            if des_prev is None or des_curr is None or len(kp_prev) < 4 or len(kp_curr) < 4:
-                #print(f"Skipping frame {i} due to insufficient features.")
-                transforms.append(transforms[-1].copy())
+            transforms = [np.eye(3, dtype=np.float32)]
+            gray_prev = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
+            kp_prev, des_prev = self.orb.detectAndCompute(gray_prev, None)
+            
+            for i in range(1, len(frames)):
+                img_curr = frames[i]
+                gray_curr = cv2.cvtColor(img_curr, cv2.COLOR_BGR2GRAY)
+                kp_curr, des_curr = self.orb.detectAndCompute(gray_curr, None)
+                if des_prev is None or des_curr is None or len(kp_prev) < 4 or len(kp_curr) < 4:
+                    #print(f"Skipping frame {i} due to insufficient features.")
+                    transforms.append(transforms[-1].copy())
+                    kp_prev, des_prev = kp_curr, des_curr
+                    continue
+                M33=self.estimateTransformFromFeatures(kp_prev, des_prev, kp_curr, des_curr) 
+                cumulative = transforms[-1] @ M33
+                transforms.append(cumulative)
                 kp_prev, des_prev = kp_curr, des_curr
-                continue
-            M33=self.estimateTransformFromFeatures(kp_prev, des_prev, kp_curr, des_curr) 
-            cumulative = transforms[-1] @ M33
-            transforms.append(cumulative)
-            kp_prev, des_prev = kp_curr, des_curr
-        
-        panorama_width,panorama_height,x_min,y_min = self.findBorders(transforms, frames)
+            
+            panorama_width,panorama_height,x_min,y_min = self.findBorders(transforms, frames)
 
-        panorama = np.zeros((panorama_height, panorama_width, C), dtype=np.float32)
-        weight = np.zeros((panorama_height, panorama_width), dtype=np.float32)
+            panorama = np.zeros((panorama_height, panorama_width, C), dtype=np.float32)
+            weight = np.zeros((panorama_height, panorama_width), dtype=np.float32)
 
-        for i, img in enumerate(frames):
-            offset_M = transforms[i].copy()
-            offset_M[0,2] -= x_min
-            offset_M[1,2] -= y_min
-            img_ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
-            # --- CLAHE input validation and conversion fix ---
-            y_channel = img_ycrcb[:, :, 0]
-            if y_channel.dtype != np.uint8:
-                y_channel = cv2.normalize(y_channel, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-            if y_channel.ndim == 3:
-                y_channel = cv2.cvtColor(y_channel, cv2.COLOR_BGR2GRAY)
-            img_ycrcb[:, :, 0] = self.clahe.apply(y_channel)
-            # --- END FIX ---
-            img = cv2.cvtColor(img_ycrcb, cv2.COLOR_YCrCb2BGR)
-            warped = cv2.warpAffine(img, offset_M[:2], (panorama_width, panorama_height))
-            gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            mask = cv2.warpAffine((gray_img > 20).astype(np.float32), offset_M[:2], (panorama_width, panorama_height))
-            small_mask = cv2.resize(mask, (mask.shape[1] // 8, mask.shape[0] // 8), interpolation=cv2.INTER_NEAREST)
-            small_blur = cv2.GaussianBlur(small_mask, (21, 21), 0)
-            feather = cv2.resize(small_blur, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_NEAREST)
-            feather=feather
-            feather = np.clip(feather, 1e-6, 1.0)
-            panorama = self.apply_feather(feather, warped, panorama, C)
-            weight += feather
-        
+            for i, img in enumerate(frames):
+                offset_M = transforms[i].copy()
+                offset_M[0,2] -= x_min
+                offset_M[1,2] -= y_min
+                warped = cv2.warpAffine(img, offset_M[:2], (panorama_width, panorama_height))
+                gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                mask = cv2.warpAffine((gray_img > 20).astype(np.float32), offset_M[:2], (panorama_width, panorama_height))
+                small_mask = cv2.resize(mask, (mask.shape[1] // 8, mask.shape[0] // 8), interpolation=cv2.INTER_NEAREST)
+                small_blur = cv2.GaussianBlur(small_mask, (21, 21), 0)
+                feather = cv2.resize(small_blur, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_NEAREST)
+                feather=feather
+                feather = np.clip(feather, 1e-6, 1.0)
+                panorama = self.apply_feather(feather, warped, panorama, C)
+                weight += feather
+        else:
+            panorama = frames[0].copy().astype(np.float32)
+            weight = np.ones((panorama.shape[0], panorama.shape[1]), dtype=np.float32)
         res=self.finish_panorama(panorama, weight)
 
         # --- End mask logic ---
@@ -219,17 +231,13 @@ class reassembler:
 # If run as a script, preserve original behavior
 if __name__ == "__main__":
     p_s=reassembler()
-    filepath, base_shape, _, recomposed_path = paths.define_files("green_ok",p_s.project_root)
-    mat = scipy.io.loadmat(p_s.project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
-    camera_matrix = mat['K']
-    dist_coeffs = mat['dist']
+    filepath, base_shape, _, recomposed_path = paths.define_files("nappies",p_s.project_root)
+
     image_files = sorted(
         glob.glob(filepath),
         key=th.alphanum_key)
     frames = [cv2.imread(f, cv2.IMREAD_COLOR) for f in image_files]
     frames = [f for f in frames if f is not None and f.shape == frames[0].shape]
-    p_s.camera_matrix = camera_matrix
-    p_s.dist_coeffs = dist_coeffs
     start = time.time()
-    res = p_s.run_panorama_pipeline(frames,save_path=None,show_plots=True)
+    res = p_s.run_panorama_pipeline(frames,save_path=recomposed_path,show_plots=True)
     print("Execution time is:", time.time() - start)

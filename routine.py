@@ -13,7 +13,7 @@ import paths
 import cannies_misprint_detection as cmd
 import functions_th as th
 from sklearn.cluster import DBSCAN
-
+import time
 
 class Routine:
     def __init__(self):
@@ -22,14 +22,11 @@ class Routine:
         self.tcm = tcm  # If Treshold_compare_masks is now a class, use: tcm.TresholdCompareMasks()
         self.cpm = cpm  # If compare_prints_with_masks is now a class, use: cpm.ComparePrintsWithMasks()
         self.cmd = cmd  # Instantiate the class here
-        # Load calibration data once
-        mat = scipy.io.loadmat(self.project_root / 'dataset_medi' / 'TARATURA' / 'medium_dataset_taratura.mat')
-        self.panorama.camera_matrix = mat['K']
-        self.panorama.dist_coeffs = mat['dist']
-
-    def run_full_analysis(self, frames, base_shape, base_print, base_image, show_plots=False):
-
-        recomposed = self.panorama.run_panorama_pipeline(frames, show_plots=False, save_path=None)
+#    @profile
+    def run_full_analysis(self, frames, base_shape, base_print, base_image, show_plots=False,recomposed=None):
+        if recomposed is None:
+            recomposed = self.panorama.run_panorama_pipeline(frames, show_plots=False, save_path=None)
+        
         # Compare masks (holes) 
         test_mask, _, holes = self.tcm.compare_and_plot_masks(base_shape, recomposed, show_plots=False)
         
@@ -53,6 +50,7 @@ class Routine:
             if region.area >= min_length:
                 for coord in region.coords:
                     filtered_skeleton[coord[0], coord[1]] = 1
+
         found_scratch = filtered_skeleton.sum() >= 200
 
         # Cannies misprint detection using the class instance
@@ -112,7 +110,7 @@ class Routine:
 
 if __name__ == "__main__":
     routine = Routine()
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_buco_in_meno", routine.project_root)
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_buco_in_piu", routine.project_root)
     base_image_path = paths.define_files("green_ok", routine.project_root)[3]
     image_files = sorted(
         glob.glob(scorre_path),
@@ -121,13 +119,16 @@ if __name__ == "__main__":
     frames = [f for f in frames if f is not None and f.shape == frames[0].shape]
     base_shape = cv2.imread(base_shape_path, cv2.IMREAD_GRAYSCALE)
     base_print = cv2.imread(base_print_path, cv2.IMREAD_GRAYSCALE)
-    base_image=cv2.imread(base_image_path)
-
+    base_image=cv2.imread(base_image_path,cv2.IMREAD_COLOR)
+    start=time.time()
     result = routine.run_full_analysis(
         frames=frames,
         base_shape=base_shape,
         base_print=base_print,
         base_image=base_image,
-        show_plots=True
+        show_plots=True,
+        recomposed=cv2.imread(recomposed_path, cv2.IMREAD_COLOR)
     )
+    end=time.time()
+    print(f"Execution time: {end - start:.2f} seconds")
     print(f"Defect detected: {result}")

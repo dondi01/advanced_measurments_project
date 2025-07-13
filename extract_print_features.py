@@ -22,7 +22,7 @@ def fuzzy_diff_mask(base_mask, test_mask, show_plots=False):
     return matched, missed, extra
 
 def preprocess_for_canny(image):
-    blurred = cv2.GaussianBlur(image, (3, 3), 0)
+    blurred = image#cv2.GaussianBlur(image, (3, 3), 0)
     try:
         gray = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
     except cv2.error:
@@ -31,7 +31,7 @@ def preprocess_for_canny(image):
     # Standard threshold for contour finding
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     # Canny mask as in Prove.py
-    canny = cv2.Canny(blurred,0,60)
+    canny = cv2.Canny(blurred,0,59)
     contours= cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]
     return canny, contours
 
@@ -39,10 +39,19 @@ def preprocess_for_canny(image):
 #and returns a fuzzy edge diff mask. This returns a good estimation
 #of prints, bends and scratches.
 def extract_print(schematic_img, picture_img, show_plots=True):
-    start = time.time()
     # Preprocess both images for Canny and contours
     aligned_base_canny, base_contours = preprocess_for_canny(schematic_img)
     aligned_test_canny, test_contours = preprocess_for_canny(picture_img)
+    # plt.figure(figsize=(10, 10))
+    # plt.subplot(1, 2, 1)
+    # plt.imshow(aligned_base_canny, cmap='gray')
+    # plt.title("Base Canny")
+    # plt.axis('off')
+    # plt.subplot(1, 2, 2)
+    # plt.imshow(aligned_test_canny, cmap='gray')
+    # plt.title("Test Canny")
+    # plt.axis('off')
+    # plt.show()
     test_rect = cv2.minAreaRect(th.get_main_object_contour(test_contours, aligned_test_canny.shape))  # Ensure we have a rectangle for alignment
     base_rect = cv2.minAreaRect(th.get_main_object_contour(base_contours, aligned_base_canny.shape))  # Ensure we have a rectangle for alignment
     aligned_test_canny = th.rescale_and_resize_mask(aligned_test_canny, test_rect, base_rect, aligned_base_canny,pad_value=0)
@@ -79,9 +88,12 @@ def extract_print(schematic_img, picture_img, show_plots=True):
 
 if __name__ == "__main__":
 
-    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_ok", project_root)  # Paths to the base and test images
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("parmareggio_ok", project_root)  # Paths to the base and test images
 
     base_img=cv2.imread(base_shape_path)  # Load the base image for comparison
     test_img=cv2.imread(recomposed_path)  # Load the test image
+    base_shape=cv2.imread(base_shape_path, cv2.IMREAD_GRAYSCALE)  # Load the base schematic image
+    test_img= th.rescale_and_resize_mask(aligned_mask=test_img, target_img=base_shape, pad_value=0)
+
     res=extract_print(base_img, test_img, show_plots=True)
-    cv2.imwrite(base_print_path, res * 255)  # Save the result as a binary mask
+    #cv2.imwrite(base_print_path, res * 255)  # Save the result as a binary mask

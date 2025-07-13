@@ -10,7 +10,7 @@ import functions_th as th
 from concurrent.futures import ProcessPoolExecutor
 # List of all valid case names from paths.py
 case_names = [
-     "green_buco_in_piu", "green_buco_in_meno", "green_lettere_disallineate",
+     "green_scratched","green_buco_in_piu", "green_buco_in_meno", "green_lettere_disallineate",
     "green_ok"
 ]
 
@@ -18,7 +18,7 @@ project_root = Path(__file__).resolve().parent
 average_time = 1
 iterations = 0
 routine_obj = routine.Routine()
-
+#@profile
 def run_case(case):
     scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files(case, project_root)
     recomposed = cv2.imread(recomposed_path, cv2.IMREAD_COLOR)
@@ -49,29 +49,30 @@ def run_case(case):
         base_shape=base_shape,
         base_print=base_print,
         base_image=base_image,
-        show_plots=False
+        show_plots=False,
+        recomposed=None
     )
     end = time.time()
-    # if any(result):
-    #     print(f"Defect detected in case: {case}")
-    #     # Optionally rerun with plots
-    #     routine_obj.run_full_analysis(
-    #         frames=frames,
-    #         base_shape=base_shape,
-    #         base_print=base_print,
-    #         base_image=base_image,
-    #         show_plots=True
-    #                     )
+    if any(result):
+        print(f"Defect detected in case: {case}")
+        # Optionally rerun with plots
+        routine_obj.run_full_analysis(
+            frames=frames,
+            base_shape=base_shape,
+            base_print=base_print,
+            base_image=base_image,
+            show_plots=True
+                        )
     return case, result, end - start
 
 def main():
     global average_time, iterations
     max_cases = len(case_names)
-    n_repeats = 50  # Number of times to process all cases
+    n_repeats = 1  # Number of times to process all cases
     all_times = []
     start = time.time()
     # Use processes for CPU-intensive image processing
-    with ProcessPoolExecutor(max_workers=6) as executor:
+    with ProcessPoolExecutor(max_workers=1) as executor:
         for repeat in range(n_repeats):
             futures = {executor.submit(run_case, case): case for case in case_names}
             for future in concurrent.futures.as_completed(futures):
@@ -93,3 +94,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    #delta=run_case("green_ok")[2]  # Run a specific case for testing
+    #print(f"Execution time for 'green_ok': {delta:.2f} seconds")

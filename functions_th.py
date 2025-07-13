@@ -104,9 +104,11 @@ def rescale_and_resize_mask(aligned_mask, mask_rect=None, target_rect=None, targ
         # Compute scaling ratios
         ratio_w = target_w / mask_w if mask_w != 0 else 1
         ratio_h = target_h / mask_h if mask_h != 0 else 1
+        #print(f"Rescaling mask from {aligned_mask.shape} to {target_w}x{target_h} based on target rectangle {target_rect[1]} and mask rectangle {mask_rect[1]}")
         # Compute new dimensions for the mask
         new_w = int(aligned_mask.shape[1] * ratio_w)
         new_h = int(aligned_mask.shape[0] * ratio_h)
+        #print(f"Rescaling mask from {aligned_mask.shape} to {new_w}x{new_h} based on target rectangle {target_rect[1]} and mask rectangle {mask_rect[1]}")
         # Resize to new dimensions
         resized_mask = cv2.resize(aligned_mask, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
         # Crop or pad to match the target shape
@@ -221,10 +223,11 @@ def align_image_to_angle(img, target_angle,contours=None, angle_and_center=None)
 def align_image_to_least_rotation(img, contours=None):
     if contours==None:
         gray= cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray=cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
         contours= cv2.findContours(gray, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0]
     main_contour = get_main_object_contour(contours, img.shape)
     if main_contour is None or len(main_contour) < 5:
-        return img, None, None
+        return img
 
     # Get the orientation angle and bounding rectangle
     angle, rect_center, rect = get_orientation_angle_and_rectangle(main_contour)
@@ -247,7 +250,7 @@ def align_image_to_least_rotation(img, contours=None):
     dy = img_center[1] - int(rect_center[1])
     M_trans = np.float32([[1, 0, dx], [0, 1, dy]])
     aligned_img = cv2.warpAffine(rotated_img, M_trans, (w, h), flags=cv2.INTER_NEAREST)
-
+    #print(aligned_img.shape)
     return aligned_img
 
 

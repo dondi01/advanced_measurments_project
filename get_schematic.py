@@ -14,7 +14,7 @@ if __name__ == "__main__":
     start = time.time()
 
     # Path to your image
-    _, base_shape_path, _, recomposed_path =paths.define_files("green_ok", project_root)  # Path to the base schematic image
+    _, base_shape_path, _, recomposed_path =paths.define_files("parmareggio_ok", project_root)  # Path to the base schematic image
 
     recomposed = cv2.imread(recomposed_path, cv2.IMREAD_GRAYSCALE)
     # Preprocess the image
@@ -31,5 +31,5 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.show()
 
-    cv2.imwrite(base_shape_path, aligned_base_thresh)
+    #cv2.imwrite(base_shape_path, aligned_base_thresh)
     print(f"Execution time: {time.time() - start:.2f} seconds")

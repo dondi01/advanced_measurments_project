@@ -73,7 +73,7 @@ def compare_and_plot_masks(base_img, test_img, show_plots=False):
     return aligned_test_thresh, aligned_base_thresh, diff_mask
 
 if __name__ == "__main__":
-    scorre_path, base_shape_path, base_print_path, recomposed_path= paths.define_files("parmareggio", project_root)  # Paths to the base and test images
+    scorre_path, base_shape_path, base_print_path, recomposed_path= paths.define_files("green_scratched", project_root)  # Paths to the base and test images
 
     base = cv2.imread(base_shape_path,cv2.IMREAD_GRAYSCALE)
     test = cv2.imread(recomposed_path)

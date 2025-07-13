@@ -14,27 +14,13 @@ def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
         test_mask=th.match_size(base_mask, test_mask, pad_value=0)
     # Extract the print from the test image using the test mask
     test_print = epf.extract_print(test_mask, test_img, show_plots=False)
-    
-    # Ensure test_print is the same size as base_mask 
-    if base_mask.shape != test_print.shape:
-        # Adding [:2] to get only the height and width,
-        # should not be necessary as only color images have
-        # 3 channels but just in case
-        target_shape = base_mask.shape[:2]
-        # Crop if too big, pad if too small, using the same logic as in Treshold_compare_masks
-        if test_print.shape[0] > target_shape[0] or test_print.shape[1] > target_shape[1]:
-            # If test ended up bigger (had to zoom in), crop it
-            test_print = tcm.center_crop(test_print, target_shape)
-        elif test_print.shape[0] < target_shape[0] or test_print.shape[1] < target_shape[1]:
-            # If it ended up smaller (had to zoom out), pad it with black stripes
-            test_print = tcm.center_pad(test_print, target_shape, pad_value=0)
-        
-        # If test_print is still not the right size (due to rounding), crop again.
-        # This is a safeguard, usually not needed but can happen with some images,
-        # but it is good to have it just in case.
-        if test_print.shape != target_shape:
-            test_print = tcm.center_crop(test_print, target_shape)
-            
+    import matplotlib.pyplot as plt
+    # plt.figure(figsize=(10, 10))
+    # plt.imshow(test_print, cmap='gray')
+    # plt.title("Test Print Extracted")
+    # plt.axis('off')
+    # plt.show()
+
     # Dilate both masks to allow for tolerance in matching
     #kernel = np.ones((21, 21), np.uint8)
     kernel= np.ones((31, 31), np.uint8)  # Smaller kernel for less aggressive dilation
@@ -56,11 +42,17 @@ def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
         overlay[missed] = [255, 0, 0]
         overlay[extra] = [0, 255, 0]
         overlay[matched] = [255, 255, 0]
+        import matplotlib.patches as mpatches
         import matplotlib.pyplot as plt
         plt.figure(figsize=(7, 7))
         plt.imshow(overlay)
         plt.title("Fuzzy Edge Match Overlay (Base vs Test Print)")
         plt.axis('off')
+        # Add legend for colors
+        red_patch = mpatches.Patch(color='red', label='Missed')
+        green_patch = mpatches.Patch(color='green', label='Extra')
+        yellow_patch = mpatches.Patch(color='yellow', label='Matched')
+        plt.legend(handles=[red_patch, green_patch, yellow_patch], loc='lower right')
         plt.show()
     
     # Fuzzy diff mask: missed or extra
@@ -78,3 +70,42 @@ def compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True):
         plt.axis('off')
         plt.show()
     return diff_fuzzy
+
+if __name__ == "__main__":
+    # Define paths to the base and test images
+    project_root = Path(__file__).parent
+    scorre_path, base_shape_path, base_print_path, recomposed_path = paths.define_files("green_buco_in_piu", project_root)
+    
+    # Load the base mask and test image
+    base_mask = cv2.imread(base_print_path, cv2.IMREAD_GRAYSCALE)
+    test_img = cv2.imread(recomposed_path)
+    base_shape= cv2.imread(base_shape_path, cv2.IMREAD_GRAYSCALE)
+    test_img= th.rescale_and_resize_mask(aligned_mask=test_img, target_img=base_shape, pad_value=0)
+    # Load the test mask
+    _,test_mask=th.preprocess(test_img)
+
+    # Compare prints with masks
+    diff_fuzzy = compare_prints_with_masks(base_mask, test_img, test_mask, show_plots=True)
+
+    # --- Plot scratches overlay on initial image ---
+    from skimage.morphology import skeletonize
+    from skimage.measure import label, regionprops
+    scratches = skeletonize(diff_fuzzy > 0)
+    labeled = label(scratches)
+    min_length = 50
+    filtered_skeleton = np.zeros_like(scratches, dtype=np.uint8)
+    for region in regionprops(labeled):
+        if region.area >= min_length:
+            for coord in region.coords:
+                filtered_skeleton[coord[0], coord[1]] = 1
+    lines_to_plot = [(coord[1], coord[0]) for region in regionprops(label(filtered_skeleton)) if region.area >= min_length for coord in region.coords]
+    plt.figure(figsize=(10, 10))
+    plt.imshow(cv2.cvtColor(test_img, cv2.COLOR_BGR2RGB))
+    if lines_to_plot:
+        xs, ys = zip(*lines_to_plot)
+        plt.scatter(xs, ys, color='yellow', s=1, label='Scratch')
+    plt.title("Scratches Overlay on Initial Image (Skeletonized)")
+    plt.axis('off')
+    plt.tight_layout(pad=5)
+    plt.legend()
+    plt.show()
