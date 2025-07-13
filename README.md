@@ -1,24 +1,23 @@
-# Git Workflow Guidelines
+# Relevant Branches
 
-This document outlines best practices for using Git to maintain an orderly repository and minimize conflicts.
+* **main**: here is the code described in section 3-4-5-6-7 of the report
+* **fault-detection**: the branch which is a variant of the main project where we experimented with using Convolutional Neural Networks for fault detection
 
-## Branching Strategy
+---
 
-1. **Main Branch**:
-   - The `main` branch should always contain production-ready code.
-   - Direct commits to `main` should be avoided. Use pull requests instead.
+## The main branch
 
-2. **Feature Branches**:
-   - Create a new branch for each feature or bug fix.
-   - Use descriptive names for branches, such as `feature/user-authentication` or `bugfix/login-error`.
+* Most of the files are there to be able to run `_main.py_` and deal with particular steps delineated in section 3 to 5.
+* `_Probabilistic_analysis.py_` is the file that implements the probabilistic model discussed in section 6.
+* `_validation.py_` and `_calculate_validation_metrics.py_` are the files that where used to statistically validate the algoriithms proposed in the **main** branch
 
+---
 
-## Pushing Changes
+## The fault-detection branch
 
-1. **Commit Messages**:
-   - Write clear and concise commit messages.
-   - Use the imperative mood, such as "Add user authentication" instead of "Added user authentication".
+* `_keras_test.py_` is the file where models are trained and designed
+* `_functions/ml_functions.py_` is the custom library implemented for most files in this branch, also used in the main branch for validation.
+* `_create_windowed_dataset.py_` is the file where the datasets used are generated
+* `_cnn_predict.py_` is the file where the trained models are actually tested
 
-2. **Frequent Commits**:
-   - Commit changes frequently to avoid large, unwieldy commits.
-   - Use `git add` to stage changes and `git commit` to commit them with a meaningful message.
+In general for this branch there are a lot of files for building, running and managing a custom docker container for harnessing the GPU processing power.
